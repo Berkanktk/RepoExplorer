@@ -599,14 +599,14 @@
     }
   </style>
   
-  <div class="container bg-[#0e0e0e]">
+  <div class="container bg-[#0e0e0e] flex flex-col min-h-screen">
     <div>
         <h1 class="text-center text-3xl font-bold mb-8">GitHub Repo Explorer</h1>
 
         <div class="flex w-full mb-4">
           <div class="token-input mr-4">
             <label>
-              <span class="label-text flex items-center gap-1">
+              <span class="label-text flex items-center gap-1 mb-1">
                 GitHub Token
                 <span
                   class="flex tooltip tooltip-bottom tooltip-primary"
@@ -630,7 +630,7 @@
           <div class="flex gap-2">
             <div class="flex user-search mb-4">
               <label>
-                <span class="label-text">GitHub Username</span>
+                <span class="label-text flex mb-1">GitHub Username</span>
                 <div class="flex flex-row gap-4">
                   <input type="text" bind:value={$username} placeholder="e.g., torvalds" class="input input-bordered block" />
                   <div class="flex flex-row gap-2">
@@ -643,13 +643,13 @@
         </div>
 
         <div class="display flex flex-wrap gap-4 bg-[#0e0e0e] pb-4 justify-between">
-          <label class="">
-            <span class="label-text">Search</span>
+          <label class="space-y-1">
+            <span class="label-textflex mb-1">Search</span>
             <input type="text" placeholder="Search by name or description..." bind:value={$searchQuery} class="input input-bordered w-full" />
           </label>
       
-          <label class="!w-[200px]">
-            <span class="label-text">Language</span>
+          <label class="!w-[200px] space-y-1">
+            <span class="label-text mb-1">Language</span>
             <select bind:value={$languageFilter} class="select select-bordered">
               <option value="all">All Languages</option>
               {#each uniqueLanguages as lang}
@@ -658,7 +658,7 @@
             </select>
           </label>
       
-          <label class="!w-[100px]">
+          <label class="!w-[100px] space-y-1">
             <span class="label-text">Repo Type</span>
             <select bind:value={$repoTypeFilter} class="select select-bordered">
               <option value="all">All</option>
@@ -667,7 +667,7 @@
             </select>
           </label>
       
-          <label class="!w-[120px]">
+          <label class="!w-[120px] space-y-1">
             <span class="label-text">Archived Status</span>
             <select bind:value={$archivedFilter} class="select select-bordered">
               <option value="all">All</option>
@@ -676,7 +676,7 @@
             </select>
         </label>
       
-          <label class="!w-[150px]">
+          <label class="!w-[150px] space-y-1">
             <span class="label-text">Template Status</span>
             <select bind:value={$templateFilter} class="select select-bordered">
               <option value="all">All</option>
@@ -685,17 +685,17 @@
             </select>
           </label>
       
-          <label class="!w-[125px]">
+          <label class="!w-[125px] space-y-1">
             <span class="label-text">Minimum Stars</span>
             <input type="number" min="0" max={$maxStars} placeholder="Minimum Stars" bind:value={$minStars} class="input input-bordered" />
           </label>
       
-          <label class="!w-[125px]">
+          <label class="!w-[125px] space-y-1">
             <span class="label-text">Minimum Forks</span>
             <input type="number" min="0" placeholder="Minimum Forks" bind:value={$minForks} class="input input-bordered" />
           </label>
       
-          <label class="!w-[175px]">
+          <label class="!w-[175px] space-y-1">
             <span class="label-text">Sort By</span>
             <select bind:value={$sortKey} class="select select-bordered">
               <option value="">None</option>
@@ -708,7 +708,7 @@
           </label>
       
           {#if $sortKey}
-            <label class="!w-[150px]">
+            <label class="!w-[150px] space-y-1">
               <span class="label-text">Direction</span>
               <select bind:value={$sortDirection} class="select select-bordered">
                 <option value="desc">Descending</option>
@@ -717,28 +717,28 @@
             </label>
           {/if}
        
-          <div class="mt-6 flex justify-end items-center">
+          <div class="mt-[26px] flex justify-end items-center">
             <button on:click={clearFilters} class="btn btn-error"><img src="delete_2_line.svg" alt="delete" />Clear</button>
           </div>
         </div>      
-      </div>
+
+        <div class="flex flex-row items-center justify-between mb-8">
+          <div>
+            <span class="ml-1 mb-2"><strong>Total Repositories:</strong> {$filteredRepos.length}</span>
+          </div>
   
+          <div>
+            <label class="flex flex-row items-center gap-2">
+              <span class="label-text">Show Forked Repos</span>
+            <input type="checkbox" bind:checked={$showForks} class="checkbox" />
+            </label>
+          </div>
+        </div>
+      </div>
+
     {#if $loading}
       <p style="text-align: center;">Loading repositories...</p>
     {:else}
-      <div class="flex flex-row items-center justify-between mb-8">
-        <div>
-          <span class="ml-1 mb-2"><strong>Total Repositories:</strong> {$filteredRepos.length}</span>
-        </div>
-
-        <div>
-          <label class="flex flex-row items-center gap-2">
-            <span class="label-text">Show Forked Repos</span>
-          <input type="checkbox" bind:checked={$showForks} class="checkbox" />
-          </label>
-        </div>
-      </div>
-
       {#if $filteredRepos.length > 0}
         <div class="repo-grid">
           {#each $filteredRepos as repo (repo.html_url)}
