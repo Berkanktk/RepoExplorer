@@ -47,11 +47,6 @@
     const loading = writable<boolean>(false);
     export const authenticatedUsername = writable<string>("");
     let initialized = false;
-    let showFilter = false;
-    
-    const toggleFilter = () => {
-      showFilter = !showFilter;
-    };
 
     // Stores for the selected repository details (for modal)
     const selectedRepo = writable<Repo | null>(null);
@@ -599,11 +594,11 @@
     }
   </style>
   
-  <div class="container bg-[#0e0e0e] flex flex-col min-h-screen">
+  <div class="container bg-[#030418] flex flex-col min-h-screen">
     <div>
         <h1 class="text-center text-3xl font-bold mb-8">GitHub Repo Explorer</h1>
-
-        <div class="flex w-full mb-4">
+        
+        <div class="flex w-full px-4 py-2 bg-[#030418]">
           <div class="token-input mr-4">
             <label>
               <span class="label-text flex items-center gap-1 mb-1">
@@ -642,7 +637,7 @@
           </div>
         </div>
 
-        <div class="display flex flex-wrap gap-4 bg-[#0e0e0e] pb-4 justify-between">
+        <div class="display flex flex-wrap gap-2 bg-[#030418] p-4 pb-4 justify-between">
           <label class="space-y-1">
             <span class="label-textflex mb-1">Search</span>
             <input type="text" placeholder="Search by name or description..." bind:value={$searchQuery} class="input input-bordered w-full" />
@@ -722,7 +717,7 @@
           </div>
         </div>      
 
-        <div class="flex flex-row items-center justify-between mb-8">
+        <div class="flex flex-row items-center justify-between px-4 py-2">
           <div>
             <span class="ml-1 mb-2"><strong>Total Repositories:</strong> {$filteredRepos.length}</span>
           </div>
@@ -740,7 +735,7 @@
       <p style="text-align: center;">Loading repositories...</p>
     {:else}
       {#if $filteredRepos.length > 0}
-        <div class="repo-grid">
+        <div class="repo-grid p-4">
           {#each $filteredRepos as repo (repo.html_url)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
