@@ -1,7 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { writable, derived } from "svelte/store";
-    import { token } from "$lib";
     import MarkdownIt from 'markdown-it';
 
     // Create a markdown-it instance with any custom options you like
@@ -13,6 +12,7 @@
     
     // Token input by user
     export const userToken = writable<string>("");
+    const rememberToken = writable<boolean>(false);
 
     // Updated Repo interface with extra property for GitHub Pages
     interface Repo {
@@ -45,9 +45,14 @@
     const sortKey = writable<string>("");
     const sortDirection = writable<string>("desc");
     const loading = writable<boolean>(false);
+    export const authenticatedUsername = writable<string>("");
+    let initialized = false;
+    let showFilter = false;
+    
+    const toggleFilter = () => {
+      showFilter = !showFilter;
+    };
 
-    const disclaimer = `Note: Your personal access token is required for authenticated GitHub API calls. It will be used only to fetch repositories and read-only data such as issues and metadata. No write access is performed.`;
-  
     // Stores for the selected repository details (for modal)
     const selectedRepo = writable<Repo | null>(null);
     const readme = writable<string>("");
@@ -150,24 +155,11 @@
     );
   
     // Caching functions using localStorage
-    function loadFromCache(): Repo[] | null {
+    function isLocalStorageAvailable(): boolean {
       try {
-        const cached = localStorage.getItem("github_repos_cache");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) return parsed;
-        }
-      } catch (e) {
-        console.error("Failed to parse cache:", e);
-      }
-      return null;
-    }
-  
-    function saveToCache(repos: Repo[]): void {
-      try {
-        localStorage.setItem("github_repos_cache", JSON.stringify(repos));
-      } catch (e) {
-        console.error("Failed to save cache:", e);
+        return typeof localStorage !== "undefined";
+      } catch {
+        return false;
       }
     }
   
@@ -210,7 +202,7 @@
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/readme`,
           {
             headers: {
-              Authorization: `token ${token}`,
+              Authorization: `token ${$userToken}`,
               Accept: "application/vnd.github.v3+json"
             }
           }
@@ -247,7 +239,7 @@
       try {
         const resCommits = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/commits?per_page=5`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resCommits.ok) {
           const data = await resCommits.json();
@@ -264,7 +256,7 @@
       try {
         const resIssues = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/issues?state=open`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resIssues.ok) {
           const data = await resIssues.json();
@@ -281,7 +273,7 @@
       try {
         const resMetadata = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resMetadata.ok) {
           const data = await resMetadata.json();
@@ -302,7 +294,7 @@
       try {
         const resContributors = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/contributors?per_page=5`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resContributors.ok) {
           const data = await resContributors.json();
@@ -319,7 +311,7 @@
       try {
         const resFiles = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/contents`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resFiles.ok) {
           const data = await resFiles.json();
@@ -337,7 +329,7 @@
       try {
         const resPR = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/pulls?state=open&per_page=5`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resPR.ok) {
           const data = await resPR.json();
@@ -354,7 +346,7 @@
       try {
         const resRel = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/releases?per_page=5`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resRel.ok) {
           const data = await resRel.json();
@@ -381,16 +373,32 @@
       releases.set([]);
     }
 
+    async function fetchRepos() {
+      if ($username === $authenticatedUsername) {
+        await fetchOwnRepos();
+      } else {
+        await fetchReposByUsername($username);
+      }
+    }
+
       // New: Fetch Repos by Username
       async function fetchReposByUsername(targetUsername: string) {
         if (!targetUsername || !$userToken) return;
         loading.set(true);
+        let page = 1;
+        let all: Repo[] = [];
         try {
-          const res = await fetch(`https://api.github.com/users/${targetUsername}/repos?per_page=100`, {
-            headers: { Authorization: `token ${$userToken}` }
-          });
-          const data: Repo[] = await res.json();
-          allRepos.set(data);
+          while (true) {
+            const res = await fetch(
+              `https://api.github.com/users/${targetUsername}/repos?per_page=100&page=${page}`,
+              { headers: { Authorization: `token ${$userToken}` } }
+            );
+            const data: Repo[] = await res.json();
+            if (!data.length) break;
+            all = all.concat(data);
+            page++;
+          }
+          allRepos.set(all);
         } catch (e) {
           console.error("Failed to fetch repos:", e);
         } finally {
@@ -401,12 +409,20 @@
       async function fetchOwnRepos() {
         if (!$userToken) return;
         loading.set(true);
+        let page = 1;
+        let all: Repo[] = [];
         try {
-          const res = await fetch(`https://api.github.com/user/repos?visibility=all&per_page=100`, {
-            headers: { Authorization: `token ${$userToken}` }
-          });
-          const data: Repo[] = await res.json();
-          allRepos.set(data);
+          while (true) {
+            const res = await fetch(
+              `https://api.github.com/user/repos?visibility=all&per_page=100&page=${page}`,
+              { headers: { Authorization: `token ${$userToken}` } }
+            );
+            const data: Repo[] = await res.json();
+            if (!data.length) break;
+            all = all.concat(data);
+            page++;
+          }
+          allRepos.set(all);
         } catch (e) {
           console.error("Failed to fetch own repos:", e);
         } finally {
@@ -415,46 +431,67 @@
       }
 
       function loadToken(): string | null {
-      return localStorage.getItem("github_user_token");
-    }
-
-    function saveToken(token: string): void {
-      localStorage.setItem("github_user_token", token);
-    }
-
-    userToken.subscribe(value => {
-      if (value) saveToken(value);
-    });
-  
-    onMount(async () => {
-      const stored = loadToken();
-      if (stored) userToken.set(stored);
-
-      const cached = loadFromCache();
-      if (cached) {
-        allRepos.set(cached);
+        if (!isLocalStorageAvailable()) return null;
+        return localStorage.getItem("github_user_token");
       }
-      let page = 1;
-      let all: Repo[] = [];
-      try {
-        while (true) {
-          const res = await fetch(
-            `https://api.github.com/user/repos?visibility=all&per_page=100&page=${page}`,
-            { headers: { Authorization: `token ${token}` } }
-          );
-          const data: Repo[] = await res.json();
-          if (!data.length) break;
-          all = all.concat(data);
-          page++;
+
+      function saveToken(token: string): void {
+        if (!isLocalStorageAvailable()) return;
+        localStorage.setItem("github_user_token", token);
+      }
+
+      function clearToken(): void {
+        if (!isLocalStorageAvailable()) return;
+        localStorage.removeItem("github_user_token");
+      }
+
+      $: if (initialized) {
+        if ($rememberToken && $userToken.trim().length > 0) {
+          console.log("Saving token:", $userToken);
+          saveToken($userToken.trim());
+        } else if (!$rememberToken) {
+          console.log("Clearing token");
+          clearToken();
         }
-        allRepos.set(all);
-        saveToCache(all);
-      } catch (e) {
-        console.error("Failed to fetch repositories:", e);
-      } finally {
-        loading.set(false);
+      } 
+
+      async function fetchAuthenticatedUsername(token: string) {
+        try {
+          const res = await fetch("https://api.github.com/user", {
+            headers: {
+              Authorization: `token ${token}`
+            }
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            authenticatedUsername.set(data.login);
+            username.set(data.login);
+            console.log("Authenticated GitHub user:", data.login);
+          } else {
+            authenticatedUsername.set("");
+            console.warn("Invalid token or request failed.");
+          }
+        } catch (err) {
+          console.error("Error fetching user info:", err);
+          authenticatedUsername.set("");
+        }
       }
-    });
+
+      $: if (initialized && $userToken.trim().length > 0) {
+        fetchAuthenticatedUsername($userToken.trim());
+      }
+
+
+      onMount(() => {
+        const stored = loadToken();
+        if (stored) {
+          userToken.set(stored);
+          rememberToken.set(true);
+        }
+        initialized = true;
+      });
+
 
     // Max starts
     const maxStars = derived(allRepos, $allRepos => {
@@ -562,11 +599,50 @@
     }
   </style>
   
-  <div class="container">
-    <div class="bg-base-100">
-        <h1 class="text-center text-2xl font-bold mb-8">GitHub Repo Explorer</h1>
+  <div class="container bg-[#0e0e0e]">
+    <div>
+        <h1 class="text-center text-3xl font-bold mb-8">GitHub Repo Explorer</h1>
 
-        <div class="display flex flex-wrap gap-4 bg-base-100 pb-4">
+        <div class="flex w-full mb-4">
+          <div class="token-input mr-4">
+            <label>
+              <span class="label-text flex items-center gap-1">
+                GitHub Token
+                <span
+                  class="flex tooltip tooltip-bottom tooltip-primary"
+                >
+                  <div class="tooltip" data-tip="Your personal access token is required for authenticated GitHub API calls. It will be used to fetch repositories and read-only data such as issues and metadata.">
+                    <img src="/information_line.svg" alt="info" />
+                  </div>
+                </span>
+              </span>
+              <input type="password" bind:value={$userToken} placeholder="Enter your GitHub token..." class="input input-bordered block w-full" />
+            </label>
+            <p class="text-xs text-gray-500 mt-2">
+              You can generate a token here:
+              <a class="text-blue-500 hover:underline" href="https://github.com/settings/personal-access-tokens" target="_blank">github.com/settings/personal-access-tokens</a>
+            </p>
+            <label class="flex items-center gap-2 mt-3">
+              <input type="checkbox" bind:checked={$rememberToken} class="checkbox checked:shadow-none" /> <span class="label-text">Remember token on this device</span>
+            </label>
+          </div>
+
+          <div class="flex gap-2">
+            <div class="flex user-search mb-4">
+              <label>
+                <span class="label-text">GitHub Username</span>
+                <div class="flex flex-row gap-4">
+                  <input type="text" bind:value={$username} placeholder="e.g., torvalds" class="input input-bordered block" />
+                  <div class="flex flex-row gap-2">
+                    <button class="btn bg-white text-black" on:click={() => fetchRepos()}>Search</button>
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="display flex flex-wrap gap-4 bg-[#0e0e0e] pb-4 justify-between">
           <label class="">
             <span class="label-text">Search</span>
             <input type="text" placeholder="Search by name or description..." bind:value={$searchQuery} class="input input-bordered w-full" />
@@ -619,11 +695,6 @@
             <input type="number" min="0" placeholder="Minimum Forks" bind:value={$minForks} class="input input-bordered" />
           </label>
       
-          <label class="flex flex-row items-center gap-2">
-              <span class="label-text">Show Forked Repos</span>
-            <input type="checkbox" bind:checked={$showForks} class="checkbox" />
-          </label>
-      
           <label class="!w-[175px]">
             <span class="label-text">Sort By</span>
             <select bind:value={$sortKey} class="select select-bordered">
@@ -647,37 +718,27 @@
           {/if}
        
           <div class="mt-6 flex justify-end items-center">
-            <button on:click={clearFilters} class="btn btn-error">Reset</button>
+            <button on:click={clearFilters} class="btn btn-error"><img src="delete_2_line.svg" alt="delete" />Clear</button>
           </div>
         </div>      
-      </div>
-      
-      <div class="token-input">
-        <label>
-          <span class="label-text">GitHub Token</span>
-          <input type="password" bind:value={$userToken} placeholder="Enter your GitHub token..." class="input input-bordered w-full" />
-        </label>
-        <p class="text-xs text-gray-500 mt-1">{disclaimer}<br>
-          You can generate a token here:
-          <a class="text-blue-500 hover:underline" href="https://github.com/settings/personal-access-tokens" target="_blank">github.com/settings/personal-access-tokens</a>
-        </p>
-      </div>
-    
-      <div class="user-search mb-4">
-        <label>
-          <span class="label-text">GitHub Username</span>
-          <input type="text" bind:value={$username} placeholder="e.g., octocat" class="input input-bordered w-full" />
-        </label>
-        <div class="flex gap-2 mt-2">
-          <button class="btn btn-primary" on:click={() => fetchReposByUsername($username)}>Search User Repos</button>
-          <button class="btn btn-secondary" on:click={fetchOwnRepos}>Load My Repos</button>
-        </div>
       </div>
   
     {#if $loading}
       <p style="text-align: center;">Loading repositories...</p>
     {:else}
-      <p class="ml-1 mb-2"><strong>Total Repositories:</strong> {$filteredRepos.length}</p>
+      <div class="flex flex-row items-center justify-between mb-8">
+        <div>
+          <span class="ml-1 mb-2"><strong>Total Repositories:</strong> {$filteredRepos.length}</span>
+        </div>
+
+        <div>
+          <label class="flex flex-row items-center gap-2">
+            <span class="label-text">Show Forked Repos</span>
+          <input type="checkbox" bind:checked={$showForks} class="checkbox" />
+          </label>
+        </div>
+      </div>
+
       {#if $filteredRepos.length > 0}
         <div class="repo-grid">
           {#each $filteredRepos as repo (repo.html_url)}
@@ -779,7 +840,7 @@
                 <ul>
                   {#each $issues as issue}
                     <li>
-                      <a href={issue.html_url} target="_blank" rel="noopener noreferrer">{issue.title}</a> by {issue.user.login} on {new Date(issue.created_at).toLocaleDateString()}
+                      <a href={issue.html_url} target="_blank" rel="noopener noreferrer"><strong>{issue.title}</strong></a> by {issue.user.login} on {new Date(issue.created_at).toLocaleDateString()}
                     </li>
                   {/each}
                 </ul>
@@ -846,7 +907,7 @@
                 <p>No live preview available.</p>
               {/if}
             {/if}
-        <button on:click={closeModal} class="btn btn-primary mt-4">
+        <button on:click={closeModal} class="btn bg-black text-white mt-4">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
