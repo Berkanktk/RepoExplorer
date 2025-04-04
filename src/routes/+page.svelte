@@ -1,7 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { writable, derived } from "svelte/store";
   import MarkdownIt from "markdown-it";
+  import { allRepos, archivedFilter, authenticatedUsername, commits, contributors, fileStructure, issues, languageFilter, livePreviewUrl, loading, metadata, minForks, minStars, pullRequests, readme, releases, repoTypeFilter, searchQuery, selectedRepo, showForks, sortDirection, sortKey, templateFilter, username, userToken, rememberToken, maxStars, filteredRepos } from "$lib/stores";
+  import type { Tab, Repo } from "$lib/types";
+  import { loadToken, saveToken, clearToken } from "$lib/utils";
+
+  // State variables
+  let initialized = false;
+  let showConfigs = true;
+  let uniqueLanguages: string[] = [];
 
   // Create a markdown-it instance with any custom options you like
   const md = new MarkdownIt({
@@ -10,160 +17,9 @@
     linkify: true, // Autoconvert URL-like text to links
   });
 
-  // Token input by user
-  export const userToken = writable<string>("");
-  const rememberToken = writable<boolean>(false);
-
-  // Updated Repo interface with extra property for GitHub Pages
-  interface Repo {
-    name: string;
-    private: boolean;
-    description: string;
-    stargazers_count: number;
-    forks_count: number;
-    language: string;
-    updated_at: string;
-    html_url: string;
-    fork: boolean;
-    archived: boolean;
-    is_template: boolean;
-    owner: { login: string };
-    has_pages?: boolean;
-  }
-
-  // Stores for fetched repositories and filter values
-  const allRepos = writable<Repo[]>([]);
-  const username = writable<string>("");
-  const searchQuery = writable<string>("");
-  const languageFilter = writable<string>("all");
-  const repoTypeFilter = writable<string>("all");
-  const archivedFilter = writable<string>("all");
-  const templateFilter = writable<string>("all");
-  const minStars = writable<number>(0);
-  const minForks = writable<number>(0);
-  const showForks = writable<boolean>(true);
-  const sortKey = writable<string>("");
-  const sortDirection = writable<string>("desc");
-  const loading = writable<boolean>(false);
-  export const authenticatedUsername = writable<string>("");
-  let initialized = false;
-  let showConfigs = true;
-
-  // Stores for the selected repository details (for modal)
-  const selectedRepo = writable<Repo | null>(null);
-  const readme = writable<string>("");
-
-  // New stores for additional details
-  const commits = writable<any[]>([]);
-  const issues = writable<any[]>([]);
-  const metadata = writable<any>(null);
-  const contributors = writable<any[]>([]);
-  const fileStructure = writable<any[]>([]);
-  const livePreviewUrl = writable<string>("");
-  const pullRequests = writable<any[]>([]);
-  const releases = writable<any[]>([]);
-
   // Active tab for modal (default "readme")
-  type Tab =
-    | "readme"
-    | "commits"
-    | "issues"
-    | "pulls"
-    | "releases"
-    | "metadata"
-    | "contributors"
-    | "files"
-    | "live";
   let activeTab: Tab = "readme";
 
-  // Derived store for filtering and sorting repos
-  const filteredRepos = derived(
-    [
-      allRepos,
-      searchQuery,
-      languageFilter,
-      repoTypeFilter,
-      archivedFilter,
-      templateFilter,
-      minStars,
-      minForks,
-      showForks,
-      sortKey,
-      sortDirection,
-    ],
-    ([
-      $allRepos,
-      $searchQuery,
-      $languageFilter,
-      $repoTypeFilter,
-      $archivedFilter,
-      $templateFilter,
-      $minStars,
-      $minForks,
-      $showForks,
-      $sortKey,
-      $sortDirection,
-    ]) => {
-      let repos = $allRepos.filter((repo) => {
-        const query = $searchQuery.toLowerCase();
-        const matchesSearch =
-          repo.name.toLowerCase().includes(query) ||
-          (repo.description && repo.description.toLowerCase().includes(query));
-        if (!matchesSearch) return false;
-        if ($languageFilter !== "all" && repo.language !== $languageFilter)
-          return false;
-        if ($repoTypeFilter !== "all") {
-          if ($repoTypeFilter === "public" && repo.private) return false;
-          if ($repoTypeFilter === "private" && !repo.private) return false;
-        }
-        if ($archivedFilter !== "all") {
-          if ($archivedFilter === "archived" && !repo.archived) return false;
-          if ($archivedFilter === "active" && repo.archived) return false;
-        }
-        if ($templateFilter !== "all") {
-          if ($templateFilter === "template" && !repo.is_template) return false;
-          if ($templateFilter === "non-template" && repo.is_template)
-            return false;
-        }
-        if (repo.stargazers_count < $minStars) return false;
-        if (repo.forks_count < $minForks) return false;
-        if (!$showForks && repo.fork) return false;
-        return true;
-      });
-
-      if ($sortKey) {
-        repos.sort((a, b) => {
-          let comp = 0;
-          if ($sortKey === "name") {
-            comp = a.name.localeCompare(b.name);
-          } else if ($sortKey === "stars") {
-            comp = a.stargazers_count - b.stargazers_count;
-          } else if ($sortKey === "forks") {
-            comp = a.forks_count - b.forks_count;
-          } else if ($sortKey === "updated") {
-            comp =
-              new Date(a.updated_at).getTime() -
-              new Date(b.updated_at).getTime();
-          } else if ($sortKey === "language") {
-            comp = (a.language || "").localeCompare(b.language || "");
-          }
-          return $sortDirection === "asc" ? comp : -comp;
-        });
-      }
-      return repos;
-    },
-  );
-
-  // Caching functions using localStorage
-  function isLocalStorageAvailable(): boolean {
-    try {
-      return typeof localStorage !== "undefined";
-    } catch {
-      return false;
-    }
-  }
-
-  let uniqueLanguages: string[] = [];
   allRepos.subscribe((repos) => {
     const langs = repos
       .map((repo) => repo.language)
@@ -187,6 +43,7 @@
   async function selectRepo(repo: Repo) {
     selectedRepo.set(repo);
     activeTab = "readme";
+    
     // Reset all detail stores
     readme.set("Loading README...");
     commits.set([]);
@@ -209,6 +66,7 @@
           },
         },
       );
+
       if (res.ok) {
         const data = await res.json();
         const decoded = atob(data.content);
@@ -237,10 +95,10 @@
       readme.set("<p>Error fetching README.</p>");
     }
 
-    // Fetch recent commits (limit 5)
+    // Fetch recent commits (limit 20)
     try {
       const resCommits = await fetch(
-        `https://api.github.com/repos/${repo.owner.login}/${repo.name}/commits?per_page=5`,
+        `https://api.github.com/repos/${repo.owner.login}/${repo.name}/commits?per_page=20`,
         { headers: { Authorization: `token ${$userToken}` } },
       );
       if (resCommits.ok) {
@@ -294,10 +152,10 @@
       metadata.set(null);
     }
 
-    // Fetch top contributors (limit 5)
+    // Fetch top contributors (limit 10)
     try {
       const resContributors = await fetch(
-        `https://api.github.com/repos/${repo.owner.login}/${repo.name}/contributors?per_page=5`,
+        `https://api.github.com/repos/${repo.owner.login}/${repo.name}/contributors?per_page=10`,
         { headers: { Authorization: `token ${$userToken}` } },
       );
       if (resContributors.ok) {
@@ -385,7 +243,6 @@
     }
   }
 
-  // New: Fetch Repos by Username
   async function fetchReposByUsername(targetUsername: string) {
     if (!targetUsername || !$userToken) return;
     loading.set(true);
@@ -436,31 +293,6 @@
     }
   }
 
-  function loadToken(): string | null {
-    if (!isLocalStorageAvailable()) return null;
-    return localStorage.getItem("github_user_token");
-  }
-
-  function saveToken(token: string): void {
-    if (!isLocalStorageAvailable()) return;
-    localStorage.setItem("github_user_token", token);
-  }
-
-  function clearToken(): void {
-    if (!isLocalStorageAvailable()) return;
-    localStorage.removeItem("github_user_token");
-  }
-
-  $: if (initialized) {
-    if ($rememberToken && $userToken.trim().length > 0) {
-      console.log("Saving token:", $userToken);
-      saveToken($userToken.trim());
-    } else if (!$rememberToken) {
-      console.log("Clearing token");
-      clearToken();
-    }
-  }
-
   async function fetchAuthenticatedUsername(token: string) {
     try {
       const res = await fetch("https://api.github.com/user", {
@@ -488,6 +320,16 @@
     fetchAuthenticatedUsername($userToken.trim());
   }
 
+  $: if (initialized) {
+    if ($rememberToken && $userToken.trim().length > 0) {
+      console.log("Saving token:", $userToken);
+      saveToken($userToken.trim());
+    } else if (!$rememberToken) {
+      console.log("Clearing token");
+      clearToken();
+    }
+  }
+
   onMount(() => {
     const stored = loadToken();
     if (stored) {
@@ -495,11 +337,6 @@
       rememberToken.set(true);
     }
     initialized = true;
-  });
-
-  // Max starts
-  const maxStars = derived(allRepos, ($allRepos) => {
-    return Math.max(...$allRepos.map((repo) => repo.stargazers_count));
   });
 </script>
 
@@ -584,9 +421,7 @@
       </div>
     {/if}
 
-    <div
-      class="display flex flex-wrap gap-2 bg-[#030418] p-4 pb-4 justify-between"
-    >
+    <div class="display flex flex-wrap gap-2 bg-[#030418] p-4 pb-4 justify-between">
       <label class="space-y-1">
         <span class="label-textflex mb-1">Search</span>
         <input
