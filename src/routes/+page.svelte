@@ -732,7 +732,7 @@
       </div>
 
     {#if $loading}
-      <p style="text-align: center;">Loading repositories...</p>
+      <p class="p-4" style="text-align: center;">Loading repositories...</p>
     {:else}
       {#if $filteredRepos.length > 0}
         <div class="repo-grid p-4">
