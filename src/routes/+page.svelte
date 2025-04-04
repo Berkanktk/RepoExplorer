@@ -47,6 +47,7 @@
     const loading = writable<boolean>(false);
     export const authenticatedUsername = writable<string>("");
     let initialized = false;
+    let showConfigs = true;
 
     // Stores for the selected repository details (for modal)
     const selectedRepo = writable<Repo | null>(null);
@@ -398,6 +399,7 @@
           console.error("Failed to fetch repos:", e);
         } finally {
           loading.set(false);
+          showConfigs = false;
         }
       }
 
@@ -422,6 +424,7 @@
           console.error("Failed to fetch own repos:", e);
         } finally {
           loading.set(false);
+          showConfigs = false;
         }
       }
 
@@ -597,7 +600,14 @@
   <div class="container bg-[#030418] flex flex-col min-h-screen">
     <div>
         <h1 class="text-center text-3xl font-bold mb-8">GitHub Repo Explorer</h1>
-        
+
+        <div class="absolute top-0 right-0 p-4">
+          <button class="btn btn-sm bg-white text-black" on:click={() => showConfigs = !showConfigs}>
+            {showConfigs ? "Hide Configs" : "Show Configs"}
+          </button>
+        </div>
+
+        {#if showConfigs}
         <div class="flex w-full px-4 py-2 bg-[#030418]">
           <div class="token-input mr-4">
             <label>
@@ -636,6 +646,7 @@
             </div>
           </div>
         </div>
+        {/if}
 
         <div class="display flex flex-wrap gap-2 bg-[#030418] p-4 pb-4 justify-between">
           <label class="space-y-1">
