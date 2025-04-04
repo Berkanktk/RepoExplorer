@@ -11,6 +11,9 @@
     linkify: true      // Autoconvert URL-like text to links
     });
     
+    // Token input by user
+    export const userToken = writable<string>("");
+
     // Updated Repo interface with extra property for GitHub Pages
     interface Repo {
       name: string;
@@ -30,6 +33,7 @@
   
     // Stores for fetched repositories and filter values
     const allRepos = writable<Repo[]>([]);
+    const username = writable<string>("");
     const searchQuery = writable<string>("");
     const languageFilter = writable<string>("all");
     const repoTypeFilter = writable<string>("all");
@@ -40,7 +44,9 @@
     const showForks = writable<boolean>(true);
     const sortKey = writable<string>("");
     const sortDirection = writable<string>("desc");
-    const loading = writable<boolean>(true);
+    const loading = writable<boolean>(false);
+
+    const disclaimer = `Note: Your personal access token is required for authenticated GitHub API calls. It will be used only to fetch repositories and read-only data such as issues and metadata. No write access is performed.`;
   
     // Stores for the selected repository details (for modal)
     const selectedRepo = writable<Repo | null>(null);
@@ -374,8 +380,56 @@
       pullRequests.set([]);
       releases.set([]);
     }
+
+      // New: Fetch Repos by Username
+      async function fetchReposByUsername(targetUsername: string) {
+        if (!targetUsername || !$userToken) return;
+        loading.set(true);
+        try {
+          const res = await fetch(`https://api.github.com/users/${targetUsername}/repos?per_page=100`, {
+            headers: { Authorization: `token ${$userToken}` }
+          });
+          const data: Repo[] = await res.json();
+          allRepos.set(data);
+        } catch (e) {
+          console.error("Failed to fetch repos:", e);
+        } finally {
+          loading.set(false);
+        }
+      }
+
+      async function fetchOwnRepos() {
+        if (!$userToken) return;
+        loading.set(true);
+        try {
+          const res = await fetch(`https://api.github.com/user/repos?visibility=all&per_page=100`, {
+            headers: { Authorization: `token ${$userToken}` }
+          });
+          const data: Repo[] = await res.json();
+          allRepos.set(data);
+        } catch (e) {
+          console.error("Failed to fetch own repos:", e);
+        } finally {
+          loading.set(false);
+        }
+      }
+
+      function loadToken(): string | null {
+      return localStorage.getItem("github_user_token");
+    }
+
+    function saveToken(token: string): void {
+      localStorage.setItem("github_user_token", token);
+    }
+
+    userToken.subscribe(value => {
+      if (value) saveToken(value);
+    });
   
     onMount(async () => {
+      const stored = loadToken();
+      if (stored) userToken.set(stored);
+
       const cached = loadFromCache();
       if (cached) {
         allRepos.set(cached);
@@ -503,6 +557,9 @@
     .modal-content button {
       margin-top: 1rem;
     }
+    .token-input {
+      margin-bottom: 1rem;
+    }
   </style>
   
   <div class="container">
@@ -595,6 +652,27 @@
         </div>      
       </div>
       
+      <div class="token-input">
+        <label>
+          <span class="label-text">GitHub Token</span>
+          <input type="password" bind:value={$userToken} placeholder="Enter your GitHub token..." class="input input-bordered w-full" />
+        </label>
+        <p class="text-xs text-gray-500 mt-1">{disclaimer}<br>
+          You can generate a token here:
+          <a class="text-blue-500 hover:underline" href="https://github.com/settings/personal-access-tokens" target="_blank">github.com/settings/personal-access-tokens</a>
+        </p>
+      </div>
+    
+      <div class="user-search mb-4">
+        <label>
+          <span class="label-text">GitHub Username</span>
+          <input type="text" bind:value={$username} placeholder="e.g., octocat" class="input input-bordered w-full" />
+        </label>
+        <div class="flex gap-2 mt-2">
+          <button class="btn btn-primary" on:click={() => fetchReposByUsername($username)}>Search User Repos</button>
+          <button class="btn btn-secondary" on:click={fetchOwnRepos}>Load My Repos</button>
+        </div>
+      </div>
   
     {#if $loading}
       <p style="text-align: center;">Loading repositories...</p>
