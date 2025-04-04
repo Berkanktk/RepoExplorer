@@ -1,7 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { writable, derived } from "svelte/store";
-    import { token } from "$lib";
     import MarkdownIt from 'markdown-it';
 
     // Create a markdown-it instance with any custom options you like
@@ -11,6 +10,10 @@
     linkify: true      // Autoconvert URL-like text to links
     });
     
+    // Token input by user
+    export const userToken = writable<string>("");
+    const rememberToken = writable<boolean>(false);
+
     // Updated Repo interface with extra property for GitHub Pages
     interface Repo {
       name: string;
@@ -30,6 +33,7 @@
   
     // Stores for fetched repositories and filter values
     const allRepos = writable<Repo[]>([]);
+    const username = writable<string>("");
     const searchQuery = writable<string>("");
     const languageFilter = writable<string>("all");
     const repoTypeFilter = writable<string>("all");
@@ -40,8 +44,11 @@
     const showForks = writable<boolean>(true);
     const sortKey = writable<string>("");
     const sortDirection = writable<string>("desc");
-    const loading = writable<boolean>(true);
-  
+    const loading = writable<boolean>(false);
+    export const authenticatedUsername = writable<string>("");
+    let initialized = false;
+    let showConfigs = true;
+
     // Stores for the selected repository details (for modal)
     const selectedRepo = writable<Repo | null>(null);
     const readme = writable<string>("");
@@ -144,24 +151,11 @@
     );
   
     // Caching functions using localStorage
-    function loadFromCache(): Repo[] | null {
+    function isLocalStorageAvailable(): boolean {
       try {
-        const cached = localStorage.getItem("github_repos_cache");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) return parsed;
-        }
-      } catch (e) {
-        console.error("Failed to parse cache:", e);
-      }
-      return null;
-    }
-  
-    function saveToCache(repos: Repo[]): void {
-      try {
-        localStorage.setItem("github_repos_cache", JSON.stringify(repos));
-      } catch (e) {
-        console.error("Failed to save cache:", e);
+        return typeof localStorage !== "undefined";
+      } catch {
+        return false;
       }
     }
   
@@ -204,7 +198,7 @@
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/readme`,
           {
             headers: {
-              Authorization: `token ${token}`,
+              Authorization: `token ${$userToken}`,
               Accept: "application/vnd.github.v3+json"
             }
           }
@@ -241,7 +235,7 @@
       try {
         const resCommits = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/commits?per_page=5`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resCommits.ok) {
           const data = await resCommits.json();
@@ -258,7 +252,7 @@
       try {
         const resIssues = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/issues?state=open`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resIssues.ok) {
           const data = await resIssues.json();
@@ -275,7 +269,7 @@
       try {
         const resMetadata = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resMetadata.ok) {
           const data = await resMetadata.json();
@@ -296,7 +290,7 @@
       try {
         const resContributors = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/contributors?per_page=5`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resContributors.ok) {
           const data = await resContributors.json();
@@ -313,7 +307,7 @@
       try {
         const resFiles = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/contents`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resFiles.ok) {
           const data = await resFiles.json();
@@ -331,7 +325,7 @@
       try {
         const resPR = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/pulls?state=open&per_page=5`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resPR.ok) {
           const data = await resPR.json();
@@ -348,7 +342,7 @@
       try {
         const resRel = await fetch(
           `https://api.github.com/repos/${repo.owner.login}/${repo.name}/releases?per_page=5`,
-          { headers: { Authorization: `token ${token}` } }
+          { headers: { Authorization: `token ${$userToken}` } }
         );
         if (resRel.ok) {
           const data = await resRel.json();
@@ -374,33 +368,128 @@
       pullRequests.set([]);
       releases.set([]);
     }
-  
-    onMount(async () => {
-      const cached = loadFromCache();
-      if (cached) {
-        allRepos.set(cached);
+
+    async function fetchRepos() {
+      if ($username === $authenticatedUsername) {
+        await fetchOwnRepos();
+      } else {
+        await fetchReposByUsername($username);
       }
-      let page = 1;
-      let all: Repo[] = [];
-      try {
-        while (true) {
-          const res = await fetch(
-            `https://api.github.com/user/repos?visibility=all&per_page=100&page=${page}`,
-            { headers: { Authorization: `token ${token}` } }
-          );
-          const data: Repo[] = await res.json();
-          if (!data.length) break;
-          all = all.concat(data);
-          page++;
+    }
+
+      // New: Fetch Repos by Username
+      async function fetchReposByUsername(targetUsername: string) {
+        if (!targetUsername || !$userToken) return;
+        loading.set(true);
+        let page = 1;
+        let all: Repo[] = [];
+        try {
+          while (true) {
+            const res = await fetch(
+              `https://api.github.com/users/${targetUsername}/repos?per_page=100&page=${page}`,
+              { headers: { Authorization: `token ${$userToken}` } }
+            );
+            const data: Repo[] = await res.json();
+            if (!data.length) break;
+            all = all.concat(data);
+            page++;
+          }
+          allRepos.set(all);
+        } catch (e) {
+          console.error("Failed to fetch repos:", e);
+        } finally {
+          loading.set(false);
+          showConfigs = false;
         }
-        allRepos.set(all);
-        saveToCache(all);
-      } catch (e) {
-        console.error("Failed to fetch repositories:", e);
-      } finally {
-        loading.set(false);
       }
-    });
+
+      async function fetchOwnRepos() {
+        if (!$userToken) return;
+        loading.set(true);
+        let page = 1;
+        let all: Repo[] = [];
+        try {
+          while (true) {
+            const res = await fetch(
+              `https://api.github.com/user/repos?visibility=all&per_page=100&page=${page}`,
+              { headers: { Authorization: `token ${$userToken}` } }
+            );
+            const data: Repo[] = await res.json();
+            if (!data.length) break;
+            all = all.concat(data);
+            page++;
+          }
+          allRepos.set(all);
+        } catch (e) {
+          console.error("Failed to fetch own repos:", e);
+        } finally {
+          loading.set(false);
+          showConfigs = false;
+        }
+      }
+
+      function loadToken(): string | null {
+        if (!isLocalStorageAvailable()) return null;
+        return localStorage.getItem("github_user_token");
+      }
+
+      function saveToken(token: string): void {
+        if (!isLocalStorageAvailable()) return;
+        localStorage.setItem("github_user_token", token);
+      }
+
+      function clearToken(): void {
+        if (!isLocalStorageAvailable()) return;
+        localStorage.removeItem("github_user_token");
+      }
+
+      $: if (initialized) {
+        if ($rememberToken && $userToken.trim().length > 0) {
+          console.log("Saving token:", $userToken);
+          saveToken($userToken.trim());
+        } else if (!$rememberToken) {
+          console.log("Clearing token");
+          clearToken();
+        }
+      } 
+
+      async function fetchAuthenticatedUsername(token: string) {
+        try {
+          const res = await fetch("https://api.github.com/user", {
+            headers: {
+              Authorization: `token ${token}`
+            }
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            authenticatedUsername.set(data.login);
+            username.set(data.login);
+            console.log("Authenticated GitHub user:", data.login);
+          } else {
+            authenticatedUsername.set("");
+            console.warn("Invalid token or request failed.");
+          }
+        } catch (err) {
+          console.error("Error fetching user info:", err);
+          authenticatedUsername.set("");
+        }
+      }
+
+      $: if (initialized && $userToken.trim().length > 0) {
+        fetchAuthenticatedUsername($userToken.trim());
+      }
+
+
+      onMount(() => {
+        const stored = loadToken();
+        if (stored) {
+          userToken.set(stored);
+          rememberToken.set(true);
+        }
+        initialized = true;
+      });
+
 
     // Max starts
     const maxStars = derived(allRepos, $allRepos => {
@@ -503,20 +592,70 @@
     .modal-content button {
       margin-top: 1rem;
     }
+    .token-input {
+      margin-bottom: 1rem;
+    }
   </style>
   
-  <div class="container">
-    <div class="bg-base-100">
-        <h1 class="text-center text-2xl font-bold mb-8">GitHub Repo Explorer</h1>
+  <div class="container bg-[#030418] flex flex-col min-h-screen">
+    <div>
+        <h1 class="text-center text-3xl font-bold mb-8">GitHub Repo Explorer</h1>
 
-        <div class="display flex flex-wrap gap-4 bg-base-100 pb-4">
-          <label class="">
-            <span class="label-text">Search</span>
+        <div class="absolute top-0 right-0 p-4">
+          <button class="btn btn-sm bg-white text-black" on:click={() => showConfigs = !showConfigs}>
+            {showConfigs ? "Hide Configs" : "Show Configs"}
+          </button>
+        </div>
+
+        {#if showConfigs}
+        <div class="flex w-full px-4 py-2 bg-[#030418]">
+          <div class="token-input mr-4">
+            <label>
+              <span class="label-text flex items-center gap-1 mb-1">
+                GitHub Token
+                <span
+                  class="flex tooltip tooltip-bottom tooltip-primary"
+                >
+                  <div class="tooltip" data-tip="Your personal access token is required for authenticated GitHub API calls. It will be used to fetch repositories and read-only data such as issues and metadata.">
+                    <img src="/information_line.svg" alt="info" />
+                  </div>
+                </span>
+              </span>
+              <input type="password" bind:value={$userToken} placeholder="Enter your GitHub token..." class="input input-bordered block w-full" />
+            </label>
+            <p class="text-xs text-gray-500 mt-2">
+              You can generate a token here:
+              <a class="text-blue-500 hover:underline" href="https://github.com/settings/personal-access-tokens" target="_blank">github.com/settings/personal-access-tokens</a>
+            </p>
+            <label class="flex items-center gap-2 mt-3">
+              <input type="checkbox" bind:checked={$rememberToken} class="checkbox checked:shadow-none" /> <span class="label-text">Remember token on this device</span>
+            </label>
+          </div>
+
+          <div class="flex gap-2">
+            <div class="flex user-search mb-4">
+              <label>
+                <span class="label-text flex mb-1">GitHub Username</span>
+                <div class="flex flex-row gap-4">
+                  <input type="text" bind:value={$username} placeholder="e.g., torvalds" class="input input-bordered block" />
+                  <div class="flex flex-row gap-2">
+                    <button class="btn bg-white text-black" on:click={() => fetchRepos()}>Search</button>
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+        {/if}
+
+        <div class="display flex flex-wrap gap-2 bg-[#030418] p-4 pb-4 justify-between">
+          <label class="space-y-1">
+            <span class="label-textflex mb-1">Search</span>
             <input type="text" placeholder="Search by name or description..." bind:value={$searchQuery} class="input input-bordered w-full" />
           </label>
       
-          <label class="!w-[200px]">
-            <span class="label-text">Language</span>
+          <label class="!w-[200px] space-y-1">
+            <span class="label-text mb-1">Language</span>
             <select bind:value={$languageFilter} class="select select-bordered">
               <option value="all">All Languages</option>
               {#each uniqueLanguages as lang}
@@ -525,7 +664,7 @@
             </select>
           </label>
       
-          <label class="!w-[100px]">
+          <label class="!w-[100px] space-y-1">
             <span class="label-text">Repo Type</span>
             <select bind:value={$repoTypeFilter} class="select select-bordered">
               <option value="all">All</option>
@@ -534,7 +673,7 @@
             </select>
           </label>
       
-          <label class="!w-[120px]">
+          <label class="!w-[120px] space-y-1">
             <span class="label-text">Archived Status</span>
             <select bind:value={$archivedFilter} class="select select-bordered">
               <option value="all">All</option>
@@ -543,7 +682,7 @@
             </select>
         </label>
       
-          <label class="!w-[150px]">
+          <label class="!w-[150px] space-y-1">
             <span class="label-text">Template Status</span>
             <select bind:value={$templateFilter} class="select select-bordered">
               <option value="all">All</option>
@@ -552,22 +691,17 @@
             </select>
           </label>
       
-          <label class="!w-[125px]">
+          <label class="!w-[125px] space-y-1">
             <span class="label-text">Minimum Stars</span>
             <input type="number" min="0" max={$maxStars} placeholder="Minimum Stars" bind:value={$minStars} class="input input-bordered" />
           </label>
       
-          <label class="!w-[125px]">
+          <label class="!w-[125px] space-y-1">
             <span class="label-text">Minimum Forks</span>
             <input type="number" min="0" placeholder="Minimum Forks" bind:value={$minForks} class="input input-bordered" />
           </label>
       
-          <label class="flex flex-row items-center gap-2">
-              <span class="label-text">Show Forked Repos</span>
-            <input type="checkbox" bind:checked={$showForks} class="checkbox" />
-          </label>
-      
-          <label class="!w-[175px]">
+          <label class="!w-[175px] space-y-1">
             <span class="label-text">Sort By</span>
             <select bind:value={$sortKey} class="select select-bordered">
               <option value="">None</option>
@@ -580,7 +714,7 @@
           </label>
       
           {#if $sortKey}
-            <label class="!w-[150px]">
+            <label class="!w-[150px] space-y-1">
               <span class="label-text">Direction</span>
               <select bind:value={$sortDirection} class="select select-bordered">
                 <option value="desc">Descending</option>
@@ -589,19 +723,30 @@
             </label>
           {/if}
        
-          <div class="mt-6 flex justify-end items-center">
-            <button on:click={clearFilters} class="btn btn-error">Reset</button>
+          <div class="mt-[26px] flex justify-end items-center">
+            <button on:click={clearFilters} class="btn btn-error"><img src="delete_2_line.svg" alt="delete" />Clear</button>
           </div>
         </div>      
-      </div>
-      
+
+        <div class="flex flex-row items-center justify-between px-4 py-2">
+          <div>
+            <span class="ml-1 mb-2"><strong>Total Repositories:</strong> {$filteredRepos.length}</span>
+          </div>
   
+          <div>
+            <label class="flex flex-row items-center gap-2">
+              <span class="label-text">Show Forked Repos</span>
+            <input type="checkbox" bind:checked={$showForks} class="checkbox" />
+            </label>
+          </div>
+        </div>
+      </div>
+
     {#if $loading}
-      <p style="text-align: center;">Loading repositories...</p>
+      <p class="p-4" style="text-align: center;">Loading repositories...</p>
     {:else}
-      <p class="ml-1 mb-2"><strong>Total Repositories:</strong> {$filteredRepos.length}</p>
       {#if $filteredRepos.length > 0}
-        <div class="repo-grid">
+        <div class="repo-grid p-4">
           {#each $filteredRepos as repo (repo.html_url)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -701,7 +846,7 @@
                 <ul>
                   {#each $issues as issue}
                     <li>
-                      <a href={issue.html_url} target="_blank" rel="noopener noreferrer">{issue.title}</a> by {issue.user.login} on {new Date(issue.created_at).toLocaleDateString()}
+                      <a href={issue.html_url} target="_blank" rel="noopener noreferrer"><strong>{issue.title}</strong></a> by {issue.user.login} on {new Date(issue.created_at).toLocaleDateString()}
                     </li>
                   {/each}
                 </ul>
@@ -768,7 +913,7 @@
                 <p>No live preview available.</p>
               {/if}
             {/if}
-        <button on:click={closeModal} class="btn btn-primary mt-4">
+        <button on:click={closeModal} class="btn bg-black text-white mt-4">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
