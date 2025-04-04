@@ -212,7 +212,23 @@
         if (res.ok) {
           const data = await res.json();
           const decoded = atob(data.content);
-          readme.set(md.render(decoded));
+          const repoBaseUrl = `https://github.com/${repo.owner.login}/${repo.name}/blob/master`;
+
+          // Replace markdown image paths
+          let updatedMarkdown = decoded.replace(
+            /!\[([^\]]*)\]\(((?!https?:\/\/)([^)]+))\)/g,
+            (match, alt, path) => `![${alt}](${repoBaseUrl}/${path}?raw=true)`
+          );
+
+          // Also replace <img src="..."> with relative paths
+          updatedMarkdown = updatedMarkdown.replace(
+            /<img\s+[^>]*src=["'](?!https?:\/\/)([^"']+)["']/g,
+            (match, path) => match.replace(path, `${repoBaseUrl}/${path}?raw=true`)
+          );
+
+          // Render with markdown-it
+          readme.set(md.render(updatedMarkdown));
+
         } else {
           readme.set("<p>No README available.</p>");
         }
@@ -369,7 +385,7 @@
       try {
         while (true) {
           const res = await fetch(
-            `https://api.github.com/user/repos?visibility=all&per_page=200&page=${page}`,
+            `https://api.github.com/user/repos?visibility=all&per_page=100&page=${page}`,
             { headers: { Authorization: `token ${token}` } }
           );
           const data: Repo[] = await res.json();
@@ -425,7 +441,7 @@
       padding: 0.25rem 0.5rem;
       border-radius: 0.375rem;
       font-size: 0.75rem;
-      margin-left: 0.5rem;
+      margin-left: 0.25rem;
     }
     .tag.public {
       background: #c6f6d5;
@@ -456,7 +472,6 @@
       z-index: 1000;
     }
     .modal-content {
-      background: white;
       padding: 1.5rem;
       border-radius: 0.75rem;
       max-width: 800px;
@@ -492,7 +507,7 @@
   
   <div class="container">
     <div class="bg-base-100">
-        <h1 class="text-center text-2xl font-bold mb-4">GitHub Repo Explorer</h1>
+        <h1 class="text-center text-2xl font-bold mb-8">GitHub Repo Explorer</h1>
 
         <div class="display flex flex-wrap gap-4 bg-base-100 pb-4">
           <label class="">
@@ -609,12 +624,24 @@
               </h2>
               {#if repo.description}
                 <p>{repo.description}</p>
+              {:else}
+                <p>No description available.</p>
               {/if}
               <ul style="list-style: none; padding: 0; margin-top: 0.5rem;">
-                <li>⭐ Stars: {repo.stargazers_count}</li>
-                <li> 🍴 Forks: {repo.forks_count}</li>
-                <li>🛠 Language: {repo.language || "N/A"}</li>
-                <li>🕒 Updated: {new Date(repo.updated_at).toLocaleDateString()}</li>
+                <li><img src="/bling_fill.svg" alt="star" class="inline"> <strong>Stars:</strong> {repo.stargazers_count}</li>
+                <li><img src="/fork_line.svg" alt="fork" class="inline"> <strong>Forks:</strong> {repo.forks_count}</li>
+                <li><img src="/code_line.svg" alt="language" class="inline"> <strong>Language:</strong> {repo.language || "N/A"}</li>
+                <ul>
+                  <img src="/time_line.svg" alt="time" class="inline"> 
+                  <strong> Last update:</strong>
+                  {#if (new Date().getTime() - new Date(repo.updated_at).getTime()) > 1000 * 3600 * 24 * 365}
+                    {Math.floor((new Date().getTime() - new Date(repo.updated_at).getTime()) / (1000 * 3600 * 24 * 365))} 
+                    {Math.floor((new Date().getTime() - new Date(repo.updated_at).getTime()) / (1000 * 3600 * 24 * 365)) === 1 ? 'year' : 'years'} ago
+                  {:else}
+                    {Math.floor((new Date().getTime() - new Date(repo.updated_at).getTime()) / (1000 * 3600 * 24))} days ago
+                  {/if}
+                  ({new Date(repo.updated_at).toLocaleDateString()})
+                </ul>
               </ul>
             </div>
           {/each}
@@ -627,7 +654,7 @@
   
   {#if $selectedRepo}
     <div class="modal-overlay" on:click={closeModal} on:keydown={(e) => e.key === 'Enter' && closeModal()} role="button" tabindex="0" aria-label="Close modal">
-      <div class="modal-content" on:click|stopPropagation on:keydown|stopPropagation={(e) => e.key === 'Enter' && e.stopPropagation()} role="dialog" tabindex="0" aria-labelledby="modal-title">
+      <div class="modal-content bg-white" on:click|stopPropagation on:keydown|stopPropagation={(e) => e.key === 'Enter' && e.stopPropagation()} role="dialog" tabindex="0" aria-labelledby="modal-title">
         <h2 id="modal-title" class="text-2xl">{$selectedRepo.name}</h2>
         <!-- Tabs UI -->
         <div class="tabs">
@@ -643,9 +670,12 @@
             {#if activeTab === "readme"}
               {#if $readme && $readme !== "Loading README..."}
                 <!-- Render the README as HTML -->
-                 <div class="bg-gray-100 p-4 rounded">
-                <div>{@html $readme}</div>
+                <div class="bg-gray-100 dark:bg-gray-900 p-4 rounded">
+                  <div class="prose dark:prose-invert max-w-none">
+                   {@html $readme}
+                  </div>
                 </div>
+                
               {:else}
                 <p>Loading README...</p>
               {/if}
@@ -654,7 +684,12 @@
                 <ul>
                   {#each $commits as commit}
                     <li>
-                      <strong>{commit.commit.message}</strong> by {commit.commit.author.name} on {new Date(commit.commit.author.date).toLocaleDateString()}
+                      <a class="text-blue-500 hover:underline" href={commit.html_url} target="_blank" rel="noopener noreferrer">{commit.sha.substring(0, 7)}</a> - 
+                      {#if commit.commit.message.length > 50}
+                        {commit.commit.message.substring(0, 50)}...
+                      {:else}
+                        <strong>{commit.commit.message}</strong> by {commit.commit.author.name} on {new Date(commit.commit.author.date).toLocaleDateString()}
+                      {/if}
                     </li>
                   {/each}
                 </ul>
@@ -683,7 +718,7 @@
                   <li><strong>Topics: </strong> 
                     {#if $metadata.topics.length > 0}
                         {#each $metadata.topics as topic}
-                          <span class="p-1 bg-gray-200 rounded mr-1">{topic}</span>
+                          <span class="p-1 bg-orange-200 rounded mr-1">{topic}</span>
                         {/each}
                     {:else}
                       None
@@ -725,7 +760,9 @@
             {:else if activeTab === "live"}
               {#if $livePreviewUrl}
                 <p>
-                  <a href={$livePreviewUrl} target="_blank" rel="noopener noreferrer">Visit Live Site</a>
+                  <a class="text-blue-500 hover:underline" 
+                    href={$livePreviewUrl} target="_blank" rel="noopener noreferrer">Live Preview.
+                  </a>
                 </p>
               {:else}
                 <p>No live preview available.</p>
@@ -739,4 +776,3 @@
         </div>
     </div>
     {/if}
-              
