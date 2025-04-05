@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { userToken, username, rememberToken, showConfigs, allRepos } from "$lib/stores";
+  import {
+    userToken,
+    username,
+    rememberToken,
+    showConfigs,
+    allRepos,
+  } from "$lib/stores";
   import { loadToken, fetchRepos } from "$lib/utils";
   import { onMount } from "svelte";
 
@@ -18,16 +24,16 @@
 </script>
 
 {#if $userToken && $allRepos.length > 0}
-<div class="sm:absolute top-0 right-0 sm:p-4 flex justify-center">
-  <button class="btn btn-sm bg-white text-black" on:click={toggleConfigs}>
-    {#if $showConfigs}
-      <img src="/toggle_right_fill.svg" alt="close" class="inline" />
-    {:else}
-      <img src="/toggle_left_line.svg" alt="settings" class="inline" />
-    {/if}
-    Configs
-  </button>
-</div>
+  <div class="sm:absolute top-0 right-0 sm:p-4 flex justify-center">
+    <button class="btn btn-sm bg-white text-black" on:click={toggleConfigs}>
+      {#if $showConfigs}
+        <img src="/toggle_right_fill.svg" alt="close" class="inline" />
+      {:else}
+        <img src="/toggle_left_line.svg" alt="settings" class="inline" />
+      {/if}
+      Configs
+    </button>
+  </div>
 {/if}
 
 {#if $showConfigs}
@@ -37,11 +43,21 @@
         <span class="label-text flex items-center gap-1 mb-1">
           GitHub Token
           <span class="flex tooltip tooltip-bottom tooltip-primary">
-            <div
-              class="tooltip"
-              data-tip="Your personal access token is required for authenticated GitHub API calls. It will be used to fetch repositories and read-only data such as issues and metadata."
-            >
+            <div class="relative group inline-block">
               <img src="/information_line.svg" alt="info" />
+
+              <div
+                class="absolute z-10 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 pointer-events-none group-hover:pointer-events-auto bg-[#09090b] text-white text-[13px] p-3 rounded w-72 shadow-lg top-full mt-2 transition-all duration-200 ease-in-out"
+              >
+                <p>This token grants the website to read your repository data through the GitHub API.</p>
+                <p class="mt-2 font-semibold">Required read-only access:</p>
+                <ul class="list-disc list-inside">
+                  <li>Metadata</li>
+                  <li>Contents</li>
+                  <li>Deployments</li>
+                  <li>Issues</li>
+                </ul>
+              </div>
             </div>
           </span>
         </span>
@@ -52,7 +68,7 @@
           class="input input-bordered block w-full"
         />
       </label>
-      <p class="text-xs text-gray-500 mt-2">
+      <span class="text-xs text-gray-500 mt-2">
         You can generate a token here:
         <a
           class="text-blue-500 hover:underline"
@@ -61,7 +77,7 @@
         >
           github.com/settings/personal-access-tokens
         </a>
-      </p>
+      </span>
       <label class="flex items-center gap-2 mt-3">
         <input
           type="checkbox"
@@ -69,6 +85,12 @@
           class="checkbox checked:shadow-none"
         />
         <span class="label-text">Remember token on this device</span>
+        <div
+          class="tooltip"
+          data-tip="This option will save your token in local storage of your browser."
+        >
+          <img src="/information_line.svg" alt="info" />
+        </div>
       </label>
     </div>
 
