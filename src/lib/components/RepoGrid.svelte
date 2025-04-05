@@ -8,10 +8,10 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="relative repo-card hover:scale-[1.02] transition-transform duration-200 ease-in-out"
+      class="relative repo-card cursor-pointer hover:scale-[1.02]"
       on:click={() => selectRepo(repo)}
     >
-      <h2 class="repo-title">
+      <h2 class="repo-title flex items-center gap-1">
         <a
           href={repo.html_url}
           target="_blank"
@@ -94,12 +94,15 @@
     border: 1px solid #e2e8f0;
     border-radius: 0.75rem;
     padding: 1rem;
-    transition: box-shadow 0.2s ease-in-out;
+    transition:
+      box-shadow 0.2s ease-in-out,
+      transform 0.2s ease-in-out; 
     color: #2d3748;
     cursor: pointer;
   }
   .repo-card:hover {
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transform: scale(1.02); 
   }
   .repo-title {
     font-size: 1.25rem;
