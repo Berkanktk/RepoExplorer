@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { userToken, username, rememberToken, showConfigs } from "$lib/stores";
+  import { userToken, username, rememberToken, showConfigs, allRepos } from "$lib/stores";
   import { loadToken, fetchRepos } from "$lib/utils";
   import { onMount } from "svelte";
 
@@ -17,6 +17,7 @@
   });
 </script>
 
+{#if $userToken && $allRepos.length > 0}
 <div class="sm:absolute top-0 right-0 sm:p-4 flex justify-center">
   <button class="btn btn-sm bg-white text-black" on:click={toggleConfigs}>
     {#if $showConfigs}
@@ -27,9 +28,10 @@
     Configs
   </button>
 </div>
+{/if}
 
 {#if $showConfigs}
-  <div class="flex w-full px-4 py-2 bg-[#030418] flex-wrap">
+  <div class="flex w-full px-4 py-2 bg-[#030418] flex-wrap sm:justify-center">
     <div class="token-input mr-4">
       <label>
         <span class="label-text flex items-center gap-1 mb-1">
