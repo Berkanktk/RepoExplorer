@@ -24,3 +24,15 @@ export type Tab =
     | "contributors"
     | "files"
     | "live";
+
+
+export type FileEntry = {
+    name: string;
+    path: string;
+    type: "file" | "dir";
+    html_url: string;
+    url: string; // GitHub API URL for this item
+    children?: FileEntry[];
+    isOpen?: boolean;
+    loading?: boolean; // Added this property
+};

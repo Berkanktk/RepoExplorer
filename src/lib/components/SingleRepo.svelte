@@ -11,7 +11,9 @@
     readme,
     releases,
     selectedRepo,
+    userToken,
   } from "$lib/stores";
+  import FileTree from "./FileTree.svelte";
 
   function closeModal() {
     selectedRepo.set(null);
@@ -209,32 +211,11 @@
       {/if}
     {:else if $activeTab === "files"}
       {#if $fileStructure.length > 0}
-        <ul>
-          {#each $fileStructure as file}
-            <li>
-              {#if file.type === "file"}
-                <a
-                  href={file.html_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="text-blue-500 hover:underline"
-                >
-                  {file.name}
-                </a>
-              {:else if file.type === "dir"}
-                /
-                <a
-                  href={file.html_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="text-blue-500 hover:underline"
-                >
-                  {file.name}
-                </a>
-              {/if}
-            </li>
-          {/each}
-        </ul>
+        <span class="text-gray-500">Click on a file to open it in a new window, or click on a folder to expand it.</span>
+
+        <div class="mt-4">
+            <FileTree files={$fileStructure} token={$userToken} />
+        </div>
       {:else}
         <p>No files found.</p>
       {/if}
