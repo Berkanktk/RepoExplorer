@@ -25,16 +25,20 @@
 
 {#if $userToken && $allRepos.length > 0}
   <div class="sm:absolute top-0 right-0 sm:p-4 flex justify-center">
-    <button class="btn btn-sm bg-white text-black" on:click={toggleConfigs}>
+    <button
+      class="inline-flex items-center gap-2 px-4 py-2 text-sm bg-white text-black rounded-xl shadow-md hover:bg-gray-100 transition-all"
+      on:click={toggleConfigs}
+    >
       {#if $showConfigs}
-        <img src="/toggle_right_fill.svg" alt="close" class="inline" />
+        <img src="/toggle_right_fill.svg" alt="close" class="w-5 h-5" />
       {:else}
-        <img src="/toggle_left_line.svg" alt="settings" class="inline" />
+        <img src="/toggle_left_line.svg" alt="settings" class="w-5 h-5" />
       {/if}
-      Configs
+      <span>Settings</span>
     </button>
   </div>
 {/if}
+
 
 {#if $showConfigs}
   <div class="flex w-full px-4 py-2 bg-[#030418] flex-wrap sm:justify-center">
