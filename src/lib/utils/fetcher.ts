@@ -3,7 +3,6 @@ import { allRepos, authenticatedUsername, commits, contributors, fileStructure, 
 import type { Repo } from "$lib/types";
 import { md } from "$lib/utils";
 
-
 let usernameStore: string = "";
 let authenticatedUsernameStore: string = "";
 let userTokenStore: string = "";
@@ -142,135 +141,85 @@ export async function selectRepo(repo: Repo) {
     fileStructure.set([]);
     livePreviewUrl.set("");
 
-    // Fetch README
+    // Fetch all in parallel
     try {
-        const res = await fetch(
-            `https://api.github.com/repos/${repo.owner.login}/${repo.name}/readme`,
-            {
+        const [
+            readmeRes,
+            commitsRes,
+            issuesRes,
+            metadataRes,
+            contributorsRes,
+            filesRes
+        ] = await Promise.all([
+            fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/readme`, {
                 headers: {
                     Authorization: `token ${userTokenStore}`,
                     Accept: "application/vnd.github.v3+json",
                 },
-            },
-        );
+            }),
 
-        if (res.ok) {
-            const data = await res.json();
+            fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/commits?per_page=20`, {
+                headers: { Authorization: `token ${userTokenStore}` },
+            }),
+
+            fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/issues?state=open`, {
+                headers: { Authorization: `token ${userTokenStore}` },
+            }),
+
+            fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}`, {
+                headers: { Authorization: `token ${userTokenStore}` },
+            }),
+
+            fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/contributors?per_page=10`, {
+                headers: { Authorization: `token ${userTokenStore}` },
+            }),
+
+            fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/contents`, {
+                headers: { Authorization: `token ${userTokenStore}` },
+            }),
+        ]);
+
+        // Handle README
+        if (readmeRes.ok) {
+            const data = await readmeRes.json();
             const decoded = atob(data.content);
             const repoBaseUrl = `https://github.com/${repo.owner.login}/${repo.name}/blob/master`;
-
-            // Replace markdown image paths
             let updatedMarkdown = decoded.replace(
                 /!\[([^\]]*)\]\(((?!https?:\/\/)([^)]+))\)/g,
-                (match, alt, path) => `![${alt}](${repoBaseUrl}/${path}?raw=true)`,
+                (match, alt, path) => `![${alt}](${repoBaseUrl}/${path}?raw=true)`
             );
-
-            // Also replace <img src="..."> with relative paths
             updatedMarkdown = updatedMarkdown.replace(
                 /<img\s+[^>]*src=["'](?!https?:\/\/)([^"']+)["']/g,
-                (match, path) =>
-                    match.replace(path, `${repoBaseUrl}/${path}?raw=true`),
+                (match, path) => match.replace(path, `${repoBaseUrl}/${path}?raw=true`)
             );
-
-            // Render with markdown-it
             readme.set(md.render(updatedMarkdown));
         } else {
             readme.set("<p>No README available.</p>");
         }
-    } catch (error) {
-        console.error("Error fetching README", error);
-        readme.set("<p>Error fetching README.</p>");
-    }
 
-    // Fetch recent commits (limit 20)
-    try {
-        const resCommits = await fetch(
-            `https://api.github.com/repos/${repo.owner.login}/${repo.name}/commits?per_page=20`,
-            { headers: { Authorization: `token ${userTokenStore}` } },
-        );
-        if (resCommits.ok) {
-            const data = await resCommits.json();
-            commits.set(data);
-        } else {
-            commits.set([]);
-        }
-    } catch (error) {
-        console.error("Error fetching commits", error);
-        commits.set([]);
-    }
+        // Commits
+        commits.set(commitsRes.ok ? await commitsRes.json() : []);
 
-    // Fetch open issues (includes pull requests)
-    try {
-        const resIssues = await fetch(
-            `https://api.github.com/repos/${repo.owner.login}/${repo.name}/issues?state=open`,
-            { headers: { Authorization: `token ${userTokenStore}` } },
-        );
-        if (resIssues.ok) {
-            const data = await resIssues.json();
-            issues.set(data);
-        } else {
-            issues.set([]);
-        }
-    } catch (error) {
-        console.error("Error fetching issues", error);
-        issues.set([]);
-    }
+        // Issues
+        issues.set(issuesRes.ok ? await issuesRes.json() : []);
 
-    // Fetch repository metadata
-    try {
-        const resMetadata = await fetch(
-            `https://api.github.com/repos/${repo.owner.login}/${repo.name}`,
-            { headers: { Authorization: `token ${userTokenStore}` } },
-        );
-        if (resMetadata.ok) {
-            const data = await resMetadata.json();
+        // Metadata
+        if (metadataRes.ok) {
+            const data = await metadataRes.json();
             metadata.set(data);
-            // Set live preview URL if GitHub Pages is enabled
             if (data.has_pages) {
-                livePreviewUrl.set(
-                    `https://${repo.owner.login}.github.io/${repo.name}/`,
-                );
+                livePreviewUrl.set(`${data.homepage}`);
             }
         } else {
             metadata.set(null);
         }
-    } catch (error) {
-        console.error("Error fetching metadata", error);
-        metadata.set(null);
-    }
 
-    // Fetch top contributors (limit 10)
-    try {
-        const resContributors = await fetch(
-            `https://api.github.com/repos/${repo.owner.login}/${repo.name}/contributors?per_page=10`,
-            { headers: { Authorization: `token ${userTokenStore}` } },
-        );
-        if (resContributors.ok) {
-            const data = await resContributors.json();
-            contributors.set(data);
-        } else {
-            contributors.set([]);
-        }
-    } catch (error) {
-        console.error("Error fetching contributors", error);
-        contributors.set([]);
-    }
+        // Contributors
+        contributors.set(contributorsRes.ok ? await contributorsRes.json() : []);
 
-    // Fetch file structure (contents at root)
-    try {
-        const resFiles = await fetch(
-            `https://api.github.com/repos/${repo.owner.login}/${repo.name}/contents`,
-            { headers: { Authorization: `token ${userTokenStore}` } },
-        );
-        if (resFiles.ok) {
-            const data = await resFiles.json();
-            console.log("File structure data:", data);
-            fileStructure.set(data);
-        } else {
-            fileStructure.set([]);
-        }
-    } catch (error) {
-        console.error("Error fetching file structure", error);
-        fileStructure.set([]);
+        // Files
+        fileStructure.set(filesRes.ok ? await filesRes.json() : []);
+    } catch (err) {
+        console.error("Parallel repo fetch failed:", err);
     }
 }
