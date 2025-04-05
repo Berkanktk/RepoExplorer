@@ -49,7 +49,7 @@
     <RepoGrid />
   {:else if $allRepos.length > 0 }
     <p style="text-align: center; margin-top: 2rem;">
-      No repositories found. Please check your filters or GitHub token.
+      No repositories found. Please check your filters.
     </p>
   {/if}
 </div>

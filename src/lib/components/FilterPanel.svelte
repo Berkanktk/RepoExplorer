@@ -39,7 +39,7 @@
   }
 </script>
 
-<div class="display flex flex-wrap gap-2 bg-[#030418] p-4 pb-4 justify-between">
+<div class="display flex flex-wrap gap-2 bg-[#030418] p-4 pb-4">
   <label class="space-y-1">
     <span class="label-textflex mb-1">Search</span>
     <input
@@ -50,7 +50,7 @@
     />
   </label>
 
-  <label class="!w-[200px] space-y-1">
+  <label class="!w-[175px] space-y-1">
     <span class="label-text mb-1">Language</span>
     <select bind:value={$languageFilter} class="select select-bordered">
       <option value="all">All Languages</option>
@@ -87,8 +87,8 @@
     </select>
   </label>
 
-  <label class="!w-[125px] space-y-1">
-    <span class="label-text">Minimum Stars</span>
+  <label class="!w-[100px] space-y-1">
+    <span class="label-text">Min. Stars</span>
     <input
       type="number"
       min="0"
@@ -99,8 +99,8 @@
     />
   </label>
 
-  <label class="!w-[125px] space-y-1">
-    <span class="label-text">Minimum Forks</span>
+  <label class="!w-[100px] space-y-1">
+    <span class="label-text">Min. Forks</span>
     <input
       type="number"
       min="0"
@@ -122,15 +122,17 @@
     </select>
   </label>
 
-  {#if $sortKey}
-    <label class="!w-[150px] space-y-1">
-      <span class="label-text">Direction</span>
-      <select bind:value={$sortDirection} class="select select-bordered">
-        <option value="desc">Descending</option>
-        <option value="asc">Ascending</option>
-      </select>
-    </label>
-  {/if}
+  <label class="!w-[150px] space-y-1">
+    <span class="label-text">Direction</span>
+    <select
+      bind:value={$sortDirection}
+      class="select select-bordered"
+      disabled={!$sortKey}
+    >
+      <option value="desc">Descending</option>
+      <option value="asc">Ascending</option>
+    </select>
+  </label>
 
   <div class="mt-[26px] flex justify-end items-center">
     <button on:click={clearFilters} class="btn btn-error">
@@ -150,13 +152,13 @@
 
   <div class="flex items-center gap-4">
     <label class="flex items-center gap-2 mt-2">
-        <input
-          type="checkbox"
-          bind:checked={$hasActiveIssues}
-          class="checkbox checked:shadow-none"
-        />
-        <span class="label-text">Only has active issues </span>
-      </label>
+      <input
+        type="checkbox"
+        bind:checked={$hasActiveIssues}
+        class="checkbox checked:shadow-none"
+      />
+      <span class="label-text">Only has active issues</span>
+    </label>
 
     <label class="flex items-center gap-2 mt-2">
       <input
