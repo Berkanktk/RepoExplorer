@@ -7,7 +7,7 @@
   {#each $filteredRepos as repo (repo.html_url)}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="repo-card" on:click={() => selectRepo(repo)}>
+    <div class="repo-card hover:scale-[1.02] transition-transform duration-200 ease-in-out" on:click={() => selectRepo(repo)}>
       <h2 class="repo-title">
         <a
           href={repo.html_url}
