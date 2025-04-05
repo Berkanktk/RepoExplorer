@@ -13,6 +13,9 @@
   } from "$lib/stores";
   import FileTree from "./FileTree.svelte";
 
+  let branches: string[] = [];
+  let deployments: string[] = [];
+
   function closeModal() {
     selectedRepo.set(null);
     readme.set("");
@@ -23,6 +26,69 @@
     fileStructure.set([]);
     livePreviewUrl.set("");
   }
+
+  function copyCloneUrl() {
+    const cloneUrl = $selectedRepo?.clone_url;
+    if (cloneUrl) {
+      navigator.clipboard.writeText(cloneUrl).then(() => {
+        alert("Clone URL copied to clipboard!");
+      });
+    }
+  }
+
+  function downloadRepo() {
+    if (!$selectedRepo) return;
+
+    const { owner, name, default_branch } = $selectedRepo;
+    const downloadUrl = `https://github.com/${owner.login}/${name}/archive/refs/heads/${default_branch}.zip`;
+
+    window.open(downloadUrl, "_blank");
+  }
+
+  function getBranches() {
+    if (!$selectedRepo) return;
+
+    const { owner, name } = $selectedRepo;
+    const branchesUrl = `https://api.github.com/repos/${owner.login}/${name}/branches`;
+
+    fetch(branchesUrl, {
+      headers: {
+        Authorization: `token ${$userToken}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        branches = data.map((branch: any) => branch.name);
+      })
+      .catch((error) => {
+        console.error("Error fetching branches:", error);
+      });
+  }
+  getBranches();
+
+  function getDeployments() {
+    if (!$selectedRepo) return;
+
+    const { owner, name } = $selectedRepo;
+    const deploymentsUrl = `https://api.github.com/repos/${owner.login}/${name}/deployments`;
+
+    fetch(deploymentsUrl, {
+      headers: {
+        Authorization: `token ${$userToken}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Deployments:", data);
+        deployments = data.map((deployment: any) => deployment.environment);
+      })
+      .catch((error) => {
+        console.error("Error fetching deployments:", error);
+      });
+  }
+  getDeployments();
 </script>
 
 <div
@@ -42,7 +108,14 @@
     aria-labelledby="modal-title"
   >
     <h2 id="modal-title" class="text-2xl">
-      {$selectedRepo ? $selectedRepo.name : "Repository"}
+      <a
+        href={$selectedRepo?.html_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="hover:underline"
+      >
+        {$selectedRepo?.name}
+      </a>
     </h2>
     <!-- Tabs UI -->
     <div class="tabs">
@@ -148,6 +221,11 @@
             </li>
           {/each}
         </ul>
+
+        <p class="text-gray-500 mt-2 flex justify-end">
+          <span class="text-gray-500 mr-2">Total Open Issues:</span>
+          <strong>{$issues.length}</strong>
+        </p>
       {:else}
         <p>No open issues found.</p>
       {/if}
@@ -155,26 +233,69 @@
       {#if $metadata}
         <ul>
           <li>
+            <strong>Branches:</strong>
+            <span class="py-0.5 px-1 bg-blue-300 rounded text-sm">
+              {$metadata.default_branch} (default)
+            </span>
+
+            {#if branches.length > 1}
+              - {#each branches.filter((branch) => branch !== $metadata.default_branch) as branch}
+                <span class="py-0.5 px-1 bg-blue-200 rounded mr-1 text-sm">
+                  {branch}
+                </span>
+              {/each}
+            {/if}
+          </li>
+
+          <li>
+            <strong>Stars:</strong>
+            {$metadata.stargazers_count}
+          </li>
+          <li>
+            <strong>Watchers:</strong>
+            {$metadata.subscribers_count}
+          </li>
+          <li>
             <strong>License:</strong>
             {$metadata.license ? $metadata.license.name : "N/A"}
           </li>
           <li>
-            <strong>Default Branch:</strong>
-            {$metadata.default_branch}
-          </li>
-          <li>
             <strong>Created At:</strong>
-            {new Date($metadata.created_at).toLocaleDateString()}
+            {new Date($metadata.created_at).toLocaleDateString()} ({Math.floor(
+              (new Date().getTime() -
+                new Date($metadata.created_at).getTime()) /
+                (1000 * 3600 * 24),
+            )}
+            {Math.floor(
+              (new Date().getTime() -
+                new Date($metadata.created_at).getTime()) /
+                (1000 * 3600 * 24),
+            ) === 1
+              ? "day"
+              : "days"} ago)
           </li>
           <li>
             <strong>Last Updated:</strong>
-            {new Date($metadata.updated_at).toLocaleDateString()}
+            {new Date($metadata.updated_at).toLocaleDateString()} ({Math.floor(
+              (new Date().getTime() -
+                new Date($metadata.updated_at).getTime()) /
+                (1000 * 3600 * 24),
+            )}
+            {Math.floor(
+              (new Date().getTime() -
+                new Date($metadata.updated_at).getTime()) /
+                (1000 * 3600 * 24),
+            ) === 1
+              ? "day"
+              : "days"} ago)
           </li>
-          <li>
+          <li class="mt-4">
             <strong>Topics:</strong>
             {#if $metadata.topics.length > 0}
               {#each $metadata.topics as topic}
-                <span class="p-1 bg-orange-200 rounded mr-1">{topic}</span>
+                <span class="py-0.5 px-1 bg-orange-200 rounded mr-1 text-sm">
+                  {topic}
+                </span>
               {/each}
             {:else}
               None
@@ -197,7 +318,20 @@
                 style="border-radius:50%"
                 class="mr-2"
               />
-              <strong class="mr-2">{contributor.login}:</strong>
+              <strong class="mr-2">
+                <a
+                  href={contributor.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-black hover:underline"
+                  title="View {contributor.login}'s profile"
+                  aria-label="View {contributor.login}'s profile"
+                  tabindex="0"
+                  aria-describedby="contributor-{contributor.login}"
+                >
+                  {contributor.login}:
+                </a>
+              </strong>
               {contributor.contributions} commits
             </li>
           {/each}
@@ -207,31 +341,68 @@
       {/if}
     {:else if $activeTab === "files"}
       {#if $fileStructure.length > 0}
-        <span class="text-gray-500">Click on a file to open it in a new window, or click on a folder to expand it.</span>
+        <span class="text-gray-500">
+          Click on a file to open it in a new window, or click on a folder to
+          expand it.
+        </span>
 
         <div class="mt-4">
-            <FileTree files={$fileStructure} token={$userToken} />
+          <FileTree files={$fileStructure} token={$userToken} />
         </div>
       {:else}
         <p>No files found.</p>
       {/if}
     {:else if $activeTab === "live"}
       {#if $livePreviewUrl}
-        <p>
+        <p class="text-gray-500 mb-2 text-center">
+          Quick preview of the hosted site.
+        </p>
+        <iframe
+          src={$livePreviewUrl}
+          width="100%"
+          height="500px"
+          class="border-0 rounded-lg shadow-lg"
+          title="Live Preview"
+        ></iframe>
+
+        <p class="mt-4">
+          <strong>Preview Link:</strong>
           <a
             class="text-blue-500 hover:underline"
             href={$livePreviewUrl}
             target="_blank"
             rel="noopener noreferrer"
           >
-            Live Preview.
+            {$livePreviewUrl}
+          </a>
+        </p>
+      {:else if deployments.includes("github-pages") && $selectedRepo}
+        <p class="mt-4">
+          <strong>Preview Link:</strong>
+          <a
+            class="text-blue-500 hover:underline text-lg"
+            href={`https://${$selectedRepo.owner.login}.github.io/${$selectedRepo.name}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            https://{$selectedRepo.owner.login}.github.io/{$selectedRepo.name}
           </a>
         </p>
       {:else}
         <p>No live preview available.</p>
       {/if}
+      {#if deployments.length > 0}
+        <div class="mt-2">
+          <strong>Deployed To:</strong>
+          {#each deployments.slice(0, 1) as deployment}
+            <span class="p-1 bg-green-200 rounded mr-1 text-sm">
+              {deployment}
+            </span>
+          {/each}
+        </div>
+      {/if}
     {/if}
-    <button on:click={closeModal} class="btn bg-black text-white mt-4">
+    <button on:click={closeModal} class="btn btn-error text-white mt-4">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         class="h-5 w-5"
@@ -247,6 +418,26 @@
         />
       </svg>
       <span>Close</span>
+    </button>
+
+    <button
+      on:click={copyCloneUrl}
+      class="btn bg-black text-white mt-4 ml-2"
+      aria-label="Copy clone URL"
+      tabindex="0"
+      on:keydown={(e) => e.key === "Enter" && copyCloneUrl()}
+    >
+      Clone URL
+    </button>
+
+    <button
+      on:click={downloadRepo}
+      class="btn bg-black text-white mt-4 ml-2"
+      aria-label="Download repository"
+      tabindex="0"
+      on:keydown={(e) => e.key === "Enter" && downloadRepo()}
+    >
+      Download
     </button>
   </div>
 </div>

@@ -31,7 +31,10 @@
 
 <div class="container bg-[#030418] flex flex-col min-h-screen">
   <div>
-    <h1 class="text-center text-3xl font-bold mb-8">GitHub Repo Explorer</h1>
+    <h1 class="text-center text-3xl font-bold mb-2">GitHub Repo Explorer</h1> 
+    <p class="text-center text-gray-500 mb-8">
+      Explore and filter your GitHub repositories with ease.
+    </p>
 
     <ConfigPanel />
     <FilterPanel />
@@ -54,7 +57,7 @@
 
 <style>
   .container {
-    max-width: 1500px;
+    max-width: 1550px;
     margin: auto;
     padding: 1rem;
   }

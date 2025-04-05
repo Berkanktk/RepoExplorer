@@ -24,6 +24,7 @@ export const readme = writable<string>("");
 
 export const commits = writable<any[]>([]);
 export const issues = writable<any[]>([]);
+export const hasActiveIssues = writable<boolean>(false);
 export const metadata = writable<any>(null);
 export const contributors = writable<any[]>([]);
 export const fileStructure = writable<any[]>([]);
@@ -52,6 +53,7 @@ export const filteredRepos = derived(
     sortKey,
     sortDirection,
     showOnlyLiveRepos,
+    hasActiveIssues, 
   ],
   ([
     $allRepos,
@@ -65,7 +67,8 @@ export const filteredRepos = derived(
     $showForks,
     $sortKey,
     $sortDirection,
-    $showOnlyLiveRepos, 
+    $showOnlyLiveRepos,
+    $hasActiveIssues,
   ]) => {
     let repos = $allRepos.filter((repo) => {
       const query = $searchQuery.toLowerCase();
@@ -91,6 +94,7 @@ export const filteredRepos = derived(
       if (repo.forks_count < $minForks) return false;
       if (!$showForks && repo.fork) return false;
       if ($showOnlyLiveRepos && !repo.has_pages && !repo.homepage) return false;
+      if ($hasActiveIssues && repo.open_issues_count === 0) return false; 
 
       return true;
     });
@@ -106,8 +110,7 @@ export const filteredRepos = derived(
           comp = a.forks_count - b.forks_count;
         } else if ($sortKey === "updated") {
           comp =
-            new Date(a.updated_at).getTime() -
-            new Date(b.updated_at).getTime();
+            new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
         } else if ($sortKey === "language") {
           comp = (a.language || "").localeCompare(b.language || "");
         }

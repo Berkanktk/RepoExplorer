@@ -13,7 +13,8 @@
     showForks,
     allRepos,
     filteredRepos,
-    showOnlyLiveRepos
+    showOnlyLiveRepos,
+    hasActiveIssues,
   } from "$lib/stores";
 
   let uniqueLanguages: string[] = [];
@@ -60,7 +61,7 @@
   </label>
 
   <label class="!w-[100px] space-y-1">
-    <span class="label-text">Repo Type</span>
+    <span class="label-text">Visibility</span>
     <select bind:value={$repoTypeFilter} class="select select-bordered">
       <option value="all">All</option>
       <option value="public">Public</option>
@@ -148,17 +149,33 @@
   </div>
 
   <div class="flex items-center gap-4">
-    <div class="flex items-center gap-2 mt-2">
-      <input type="checkbox" bind:checked={$showOnlyLiveRepos} class="checkbox" />
+    <label class="flex items-center gap-2 mt-2">
+        <input
+          type="checkbox"
+          bind:checked={$hasActiveIssues}
+          class="checkbox checked:shadow-none"
+        />
+        <span class="label-text">Only has active issues </span>
+      </label>
+
+    <label class="flex items-center gap-2 mt-2">
+      <input
+        type="checkbox"
+        bind:checked={$showOnlyLiveRepos}
+        class="checkbox checked:shadow-none"
+      />
       <span class="label-text">Only show repos with Live URL</span>
-    </div>
-    
+    </label>
+
     <div class="flex items-center gap-2 mt-2">
       <label class="flex flex-row items-center gap-2">
-        <input type="checkbox" bind:checked={$showForks} class="checkbox" />
+        <input
+          type="checkbox"
+          bind:checked={$showForks}
+          class="checkbox checked:shadow-none"
+        />
         <span class="label-text">Show Forked Repos</span>
       </label>
     </div>
-</div>
-
+  </div>
 </div>

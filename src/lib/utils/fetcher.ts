@@ -207,7 +207,7 @@ export async function selectRepo(repo: Repo) {
         if (metadataRes.ok) {
             const data = await metadataRes.json();
             metadata.set(data);
-            if (data.has_pages) {
+            if (data.homepage || data.has_pages) {
                 livePreviewUrl.set(`${data.homepage}`);
             }
         } else {

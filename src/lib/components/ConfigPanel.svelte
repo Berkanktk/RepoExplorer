@@ -17,14 +17,19 @@
   });
 </script>
 
-<div class="absolute top-0 right-0 p-4">
+<div class="sm:absolute top-0 right-0 sm:p-4 flex justify-center">
   <button class="btn btn-sm bg-white text-black" on:click={toggleConfigs}>
-    {$showConfigs ? "Hide Configs" : "Show Configs"}
+    {#if $showConfigs}
+      <img src="/toggle_right_fill.svg" alt="close" class="inline" />
+    {:else}
+      <img src="/toggle_left_line.svg" alt="settings" class="inline" />
+    {/if}
+    Configs
   </button>
 </div>
 
 {#if $showConfigs}
-  <div class="flex w-full px-4 py-2 bg-[#030418]">
+  <div class="flex w-full px-4 py-2 bg-[#030418] flex-wrap">
     <div class="token-input mr-4">
       <label>
         <span class="label-text flex items-center gap-1 mb-1">

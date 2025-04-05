@@ -13,6 +13,9 @@ export interface Repo {
     owner: { login: string };
     has_pages?: boolean;
     homepage?: string;
+    clone_url?: string;
+    default_branch?: string;
+    open_issues_count?: number;
 }
 
 export type Tab =

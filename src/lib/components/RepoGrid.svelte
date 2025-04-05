@@ -129,8 +129,8 @@
     background: #faf089;
     color: #975a16;
   }
-  .tag.live {
+  /* .tag.live {
     background: #bee3f8;
     color: #2b6cb0;
-  }
+  } */
 </style>
