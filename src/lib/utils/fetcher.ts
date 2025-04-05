@@ -1,5 +1,5 @@
 
-import { allRepos, authenticatedUsername, commits, contributors, fileStructure, issues, livePreviewUrl, loading, metadata, pullRequests, readme, releases, selectedRepo, username, userToken, showConfigs, activeTab } from "$lib/stores";
+import { allRepos, authenticatedUsername, commits, contributors, fileStructure, issues, livePreviewUrl, loading, metadata, readme, selectedRepo, username, userToken, showConfigs, activeTab } from "$lib/stores";
 import type { Repo } from "$lib/types";
 import { md } from "$lib/utils";
 
@@ -7,7 +7,6 @@ import { md } from "$lib/utils";
 let usernameStore: string = "";
 let authenticatedUsernameStore: string = "";
 let userTokenStore: string = "";
-let activeTabStore: string = "readme";
 
 $: username.subscribe((value) => {
     usernameStore = value;
@@ -23,10 +22,6 @@ $: userToken.subscribe((value) => {
 }
 );
 
-$: activeTab.subscribe((value) => {
-    activeTabStore = value;
-});
-
 export async function fetchRepos() {
     if (usernameStore === authenticatedUsernameStore) {
         await fetchOwnRepos();
@@ -37,51 +32,78 @@ export async function fetchRepos() {
 
 export async function fetchReposByUsername(targetUsername: string) {
     if (!targetUsername || !userTokenStore) return;
+
     loading.set(true);
     let page = 1;
     let all: Repo[] = [];
+
     try {
         while (true) {
             const res = await fetch(
                 `https://api.github.com/users/${targetUsername}/repos?per_page=100&page=${page}`,
-                { headers: { Authorization: `token ${userTokenStore}` } },
+                {
+                    headers: {
+                        Authorization: `token ${userTokenStore}`,
+                    },
+                }
             );
+
             const data: Repo[] = await res.json();
-            if (!data.length) break;
             all = all.concat(data);
+
+            if (data.length < 100) break;
+
             page++;
         }
+
         allRepos.set(all);
     } catch (e) {
         console.error("Failed to fetch repos:", e);
     } finally {
         loading.set(false);
-        showConfigs.set(false);
+        showConfigs.set(true);
     }
 }
 
-export async function fetchOwnRepos() {
+
+export async function fetchOwnRepos(): Promise<void> {
     if (!userTokenStore) return;
+
     loading.set(true);
+    showConfigs.set(false);
+
     let page = 1;
     let all: Repo[] = [];
+
     try {
         while (true) {
             const res = await fetch(
                 `https://api.github.com/user/repos?visibility=all&per_page=100&page=${page}`,
-                { headers: { Authorization: `token ${userTokenStore}` } },
+                {
+                    headers: {
+                        Authorization: `token ${userTokenStore}`,
+                        Accept: "application/vnd.github.v3+json",
+                    },
+                }
             );
+
+            if (!res.ok) {
+                console.error(`GitHub API error (page ${page}):`, await res.text());
+                break;
+            }
+
             const data: Repo[] = await res.json();
-            if (!data.length) break;
-            all = all.concat(data);
+
+            all.push(...data);
+            if (data.length < 100) break;
             page++;
         }
+
         allRepos.set(all);
-    } catch (e) {
-        console.error("Failed to fetch own repos:", e);
+    } catch (err) {
+        console.error("Failed to fetch own repos:", err);
     } finally {
         loading.set(false);
-        showConfigs.set(false);
     }
 }
 
@@ -109,7 +131,7 @@ export async function fetchAuthenticatedUsername(token: string) {
 
 export async function selectRepo(repo: Repo) {
     selectedRepo.set(repo);
-    activeTabStore = "readme";
+    activeTab.set("readme");
 
     // Reset all detail stores
     readme.set("Loading README...");
@@ -119,8 +141,6 @@ export async function selectRepo(repo: Repo) {
     contributors.set([]);
     fileStructure.set([]);
     livePreviewUrl.set("");
-    pullRequests.set([]);
-    releases.set([]);
 
     // Fetch README
     try {
@@ -252,39 +272,5 @@ export async function selectRepo(repo: Repo) {
     } catch (error) {
         console.error("Error fetching file structure", error);
         fileStructure.set([]);
-    }
-
-    // Fetch open pull requests (limit 5)
-    try {
-        const resPR = await fetch(
-            `https://api.github.com/repos/${repo.owner.login}/${repo.name}/pulls?state=open&per_page=5`,
-            { headers: { Authorization: `token ${userTokenStore}` } },
-        );
-        if (resPR.ok) {
-            const data = await resPR.json();
-            pullRequests.set(data);
-        } else {
-            pullRequests.set([]);
-        }
-    } catch (error) {
-        console.error("Error fetching pull requests", error);
-        pullRequests.set([]);
-    }
-
-    // Fetch latest releases (limit 5)
-    try {
-        const resRel = await fetch(
-            `https://api.github.com/repos/${repo.owner.login}/${repo.name}/releases?per_page=5`,
-            { headers: { Authorization: `token ${userTokenStore}` } },
-        );
-        if (resRel.ok) {
-            const data = await resRel.json();
-            releases.set(data);
-        } else {
-            releases.set([]);
-        }
-    } catch (error) {
-        console.error("Error fetching releases", error);
-        releases.set([]);
     }
 }

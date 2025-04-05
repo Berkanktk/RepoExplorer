@@ -7,9 +7,7 @@
     issues,
     livePreviewUrl,
     metadata,
-    pullRequests,
     readme,
-    releases,
     selectedRepo,
     userToken,
   } from "$lib/stores";
@@ -24,8 +22,6 @@
     contributors.set([]);
     fileStructure.set([]);
     livePreviewUrl.set("");
-    pullRequests.set([]);
-    releases.set([]);
   }
 </script>
 

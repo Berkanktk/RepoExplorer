@@ -28,8 +28,6 @@ export const metadata = writable<any>(null);
 export const contributors = writable<any[]>([]);
 export const fileStructure = writable<any[]>([]);
 export const livePreviewUrl = writable<string>("");
-export const pullRequests = writable<any[]>([]);
-export const releases = writable<any[]>([]);
 
 export const showConfigs = writable<boolean>(true);
 export const activeTab = writable<string>("readme");
