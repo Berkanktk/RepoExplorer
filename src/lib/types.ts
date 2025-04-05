@@ -12,6 +12,7 @@ export interface Repo {
     is_template: boolean;
     owner: { login: string };
     has_pages?: boolean;
+    homepage?: string;
 }
 
 export type Tab =

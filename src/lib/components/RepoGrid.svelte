@@ -7,7 +7,10 @@
   {#each $filteredRepos as repo (repo.html_url)}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="repo-card hover:scale-[1.02] transition-transform duration-200 ease-in-out" on:click={() => selectRepo(repo)}>
+    <div
+      class="relative repo-card hover:scale-[1.02] transition-transform duration-200 ease-in-out"
+      on:click={() => selectRepo(repo)}
+    >
       <h2 class="repo-title">
         <a
           href={repo.html_url}
@@ -34,6 +37,9 @@
       {:else}
         <p>No description available.</p>
       {/if}
+      <!-- {#if repo.has_pages || repo.homepage}
+        <span class="absolute top-2 right-2 tag live">Live</span>
+      {/if} -->
       <ul style="list-style: none; padding: 0; margin-top: 0.5rem;">
         <li>
           <img src="/bling_fill.svg" alt="star" class="inline" />
@@ -122,5 +128,9 @@
   .tag.template {
     background: #faf089;
     color: #975a16;
+  }
+  .tag.live {
+    background: #bee3f8;
+    color: #2b6cb0;
   }
 </style>

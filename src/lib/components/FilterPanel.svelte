@@ -13,6 +13,7 @@
     showForks,
     allRepos,
     filteredRepos,
+    showOnlyLiveRepos
   } from "$lib/stores";
 
   let uniqueLanguages: string[] = [];
@@ -33,6 +34,7 @@
     showForks.set(true);
     sortKey.set("");
     sortDirection.set("desc");
+    showOnlyLiveRepos.set(false);
   }
 </script>
 
@@ -145,10 +147,18 @@
     </span>
   </div>
 
-  <div>
-    <label class="flex flex-row items-center gap-2">
-      <span class="label-text">Show Forked Repos</span>
-      <input type="checkbox" bind:checked={$showForks} class="checkbox" />
-    </label>
-  </div>
+  <div class="flex items-center gap-4">
+    <div class="flex items-center gap-2 mt-2">
+      <input type="checkbox" bind:checked={$showOnlyLiveRepos} class="checkbox" />
+      <span class="label-text">Only show repos with Live URL</span>
+    </div>
+    
+    <div class="flex items-center gap-2 mt-2">
+      <label class="flex flex-row items-center gap-2">
+        <input type="checkbox" bind:checked={$showForks} class="checkbox" />
+        <span class="label-text">Show Forked Repos</span>
+      </label>
+    </div>
+</div>
+
 </div>

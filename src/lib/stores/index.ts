@@ -28,6 +28,7 @@ export const metadata = writable<any>(null);
 export const contributors = writable<any[]>([]);
 export const fileStructure = writable<any[]>([]);
 export const livePreviewUrl = writable<string>("");
+export const showOnlyLiveRepos = writable(false);
 
 export const showConfigs = writable<boolean>(true);
 export const activeTab = writable<string>("readme");
@@ -50,6 +51,7 @@ export const filteredRepos = derived(
     showForks,
     sortKey,
     sortDirection,
+    showOnlyLiveRepos,
   ],
   ([
     $allRepos,
@@ -63,6 +65,7 @@ export const filteredRepos = derived(
     $showForks,
     $sortKey,
     $sortDirection,
+    $showOnlyLiveRepos, 
   ]) => {
     let repos = $allRepos.filter((repo) => {
       const query = $searchQuery.toLowerCase();
@@ -82,12 +85,13 @@ export const filteredRepos = derived(
       }
       if ($templateFilter !== "all") {
         if ($templateFilter === "template" && !repo.is_template) return false;
-        if ($templateFilter === "non-template" && repo.is_template)
-          return false;
+        if ($templateFilter === "non-template" && repo.is_template) return false;
       }
       if (repo.stargazers_count < $minStars) return false;
       if (repo.forks_count < $minForks) return false;
       if (!$showForks && repo.fork) return false;
+      if ($showOnlyLiveRepos && !repo.has_pages && !repo.homepage) return false;
+
       return true;
     });
 
@@ -110,6 +114,7 @@ export const filteredRepos = derived(
         return $sortDirection === "asc" ? comp : -comp;
       });
     }
+
     return repos;
-  },
+  }
 );
