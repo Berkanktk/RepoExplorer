@@ -18,7 +18,7 @@ Check it out at [Repo Explorer](https://gh.berkankutuk.dk/).
   - Show only repositories with active issues  
   - Show only repositories with a live preview URL  
 - **Sorting Options**  
-  - Sort repositories by name, stars, forks, language, or last updated  
+  - Sort repositories by name, stars, forks, language, last updated or visibility  
 - **Detailed Repository View** with tabbed interface  
   - README, commits, issues, metadata, contributors, file structure, and live preview  
 - **Repository Actions**  

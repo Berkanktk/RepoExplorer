@@ -113,6 +113,8 @@ export const filteredRepos = derived(
             new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
         } else if ($sortKey === "language") {
           comp = (a.language || "").localeCompare(b.language || "");
+        } else if ($sortKey === "visibility") {
+          comp = (a.private ? 1 : 0) - (b.private ? 1 : 0);
         }
         return $sortDirection === "asc" ? comp : -comp;
       });

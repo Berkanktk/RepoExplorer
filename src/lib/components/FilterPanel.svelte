@@ -119,6 +119,7 @@
       <option value="forks">Forks</option>
       <option value="updated">Recently Updated</option>
       <option value="language">Language</option>
+      <option value="visibility">Visibility</option>  <!-- Added -->
     </select>
   </label>
 
