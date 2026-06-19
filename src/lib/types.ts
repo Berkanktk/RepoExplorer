@@ -5,7 +5,11 @@ export interface Repo {
     stargazers_count: number;
     forks_count: number;
     language: string;
+    license?: { key: string; name: string } | null;
     updated_at: string;
+    created_at?: string;
+    pushed_at?: string;
+    size?: number;
     html_url: string;
     fork: boolean;
     archived: boolean;
@@ -13,6 +17,14 @@ export interface Repo {
     owner: { login: string };
     has_pages?: boolean;
     homepage?: string;
+    topics?: string[];
+    permissions?: {
+        admin?: boolean;
+        maintain?: boolean;
+        pull?: boolean;
+        push?: boolean;
+        triage?: boolean;
+    };
     clone_url?: string;
     default_branch?: string;
     open_issues_count?: number;
