@@ -11,6 +11,7 @@
     sortKey,
     sortDirection,
     showForks,
+    showOnlyForked,
     allRepos,
     filteredRepos,
     showOnlyLiveRepos,
@@ -33,6 +34,7 @@
     minStars.set(0);
     minForks.set(0);
     showForks.set(true);
+    showOnlyForked.set(false);
     sortKey.set("");
     sortDirection.set("desc");
     showOnlyLiveRepos.set(false);
@@ -168,6 +170,15 @@
         class="checkbox checked:shadow-none"
       />
       <span class="label-text">Only show repos with Live URL</span>
+    </label>
+
+    <label class="flex items-center gap-2 mt-2">
+      <input
+        type="checkbox"
+        bind:checked={$showOnlyForked}
+        class="checkbox checked:shadow-none"
+      />
+      <span class="label-text">Only show forked repos</span>
     </label>
 
     <div class="flex items-center gap-2 mt-2">

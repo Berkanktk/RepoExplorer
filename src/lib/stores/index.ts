@@ -15,6 +15,7 @@ export const templateFilter = writable<string>("all");
 export const minStars = writable<number>(0);
 export const minForks = writable<number>(0);
 export const showForks = writable<boolean>(true);
+export const showOnlyForked = writable<boolean>(false);
 export const sortKey = writable<string>("");
 export const sortDirection = writable<string>("desc");
 
@@ -53,7 +54,8 @@ export const filteredRepos = derived(
     sortKey,
     sortDirection,
     showOnlyLiveRepos,
-    hasActiveIssues, 
+    hasActiveIssues,
+    showOnlyForked,
   ],
   ([
     $allRepos,
@@ -69,6 +71,7 @@ export const filteredRepos = derived(
     $sortDirection,
     $showOnlyLiveRepos,
     $hasActiveIssues,
+    $showOnlyForked,
   ]) => {
     let repos = $allRepos.filter((repo) => {
       const query = $searchQuery.toLowerCase();
@@ -93,6 +96,7 @@ export const filteredRepos = derived(
       if (repo.stargazers_count < $minStars) return false;
       if (repo.forks_count < $minForks) return false;
       if (!$showForks && repo.fork) return false;
+      if ($showOnlyForked && !repo.fork) return false;
       if ($showOnlyLiveRepos && !repo.has_pages && !repo.homepage) return false;
       if ($hasActiveIssues && repo.open_issues_count === 0) return false; 
 
