@@ -47,9 +47,9 @@
 </script>
 
 <div class="container bg-[#030418] flex flex-col min-h-screen">
-  <div class="pt-8">
-    <h1 class="text-center text-3xl font-bold mb-2">GitHub Repo Explorer</h1>
-    <p class="text-center text-gray-500 mb-8">
+  <div class="page-header">
+    <h1>GitHub Repo Explorer</h1>
+    <p>
       Explore and filter your GitHub repositories with ease.
     </p>
 
@@ -61,12 +61,12 @@
   </div>
 
   {#if $loading}
-    <p class="p-4" style="text-align: center;">Loading repositories...</p>
+    <p class="p-4 text-center text-[#8b949e]">Loading repositories...</p>
   {:else if $filteredRepos.length > 0}
     <RepoGrid />
   {:else if $allRepos.length > 0}
-    <p style="text-align: center; margin-top: 2rem;">
-      No repositories found. Please check your filters.
+    <p class="text-center mt-8 text-[#8b949e]">
+      No repositories matched your filters.
     </p>
   {/if}
 </div>
@@ -94,5 +94,24 @@
     max-width: 1550px;
     margin: auto;
     padding: 1rem;
+    width: 100%;
+  }
+
+  .page-header {
+    padding-top: 2rem;
+  }
+
+  h1 {
+    margin: 0 0 0.5rem;
+    text-align: center;
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: #e6edf3;
+  }
+
+  p {
+    margin: 0 0 2rem;
+    text-align: center;
+    color: #8b949e;
   }
 </style>

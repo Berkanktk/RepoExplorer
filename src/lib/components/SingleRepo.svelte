@@ -15,6 +15,7 @@
 
   let branches: string[] = [];
   let deployments: string[] = [];
+  let copied = false;
 
   function closeModal() {
     selectedRepo.set(null);
@@ -27,464 +28,1010 @@
     livePreviewUrl.set("");
   }
 
-  function copyCloneUrl() {
+  async function copyCloneUrl() {
     const cloneUrl = $selectedRepo?.clone_url;
     if (cloneUrl) {
-      navigator.clipboard.writeText(cloneUrl).then(() => {
-        alert("Clone URL copied to clipboard!");
-      });
+      await navigator.clipboard.writeText(cloneUrl);
+      copied = true;
+      setTimeout(() => (copied = false), 2000);
     }
   }
 
   function downloadRepo() {
     if (!$selectedRepo) return;
-
     const { owner, name, default_branch } = $selectedRepo;
-    const downloadUrl = `https://github.com/${owner.login}/${name}/archive/refs/heads/${default_branch}.zip`;
-
-    window.open(downloadUrl, "_blank");
+    const url = `https://github.com/${owner.login}/${name}/archive/refs/heads/${default_branch}.zip`;
+    window.open(url, "_blank");
   }
 
   function getBranches() {
     if (!$selectedRepo) return;
-
     const { owner, name } = $selectedRepo;
-    const branchesUrl = `https://api.github.com/repos/${owner.login}/${name}/branches`;
-
-    fetch(branchesUrl, {
+    fetch(`https://api.github.com/repos/${owner.login}/${name}/branches`, {
       headers: {
         Authorization: `token ${$userToken}`,
         Accept: "application/vnd.github.v3+json",
       },
     })
-      .then((response) => response.json())
-      .then((data) => {
-        branches = data.map((branch: any) => branch.name);
-      })
-      .catch((error) => {
-        console.error("Error fetching branches:", error);
-      });
+      .then((r) => r.json())
+      .then((data) => { branches = data.map((b: any) => b.name); })
+      .catch(console.error);
   }
-  getBranches();
 
   function getDeployments() {
     if (!$selectedRepo) return;
-
     const { owner, name } = $selectedRepo;
-    const deploymentsUrl = `https://api.github.com/repos/${owner.login}/${name}/deployments`;
-
-    fetch(deploymentsUrl, {
+    fetch(`https://api.github.com/repos/${owner.login}/${name}/deployments`, {
       headers: {
         Authorization: `token ${$userToken}`,
         Accept: "application/vnd.github.v3+json",
       },
     })
-      .then((response) => response.json())
-      .then((data) => {
-        console.log("Deployments:", data);
-        deployments = data.map((deployment: any) => deployment.environment);
-      })
-      .catch((error) => {
-        console.error("Error fetching deployments:", error);
-      });
+      .then((r) => r.json())
+      .then((data) => { deployments = data.map((d: any) => d.environment); })
+      .catch(console.error);
   }
+
+  getBranches();
   getDeployments();
+
+  function daysAgo(dateStr: string): string {
+    const d = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
+    if (d === 0) return "today";
+    if (d === 1) return "1 day ago";
+    return `${d} days ago`;
+  }
+
+  const TABS = [
+    { key: "readme", label: "README" },
+    { key: "commits", label: "Commits" },
+    { key: "issues", label: "Issues" },
+    { key: "metadata", label: "Metadata" },
+    { key: "contributors", label: "Contributors" },
+    { key: "files", label: "Files" },
+    { key: "live", label: "Live Preview" },
+  ] as const;
 </script>
 
-<div
-  class="modal-overlay"
-  on:click={closeModal}
-  on:keydown={(e) => e.key === "Enter" && closeModal()}
-  role="button"
-  tabindex="0"
-  aria-label="Close modal"
->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="overlay" on:click={closeModal}>
+  <!-- blur sits behind, does not affect modal stacking context -->
+  <div class="overlay-blur"></div>
   <div
-    class="modal-content bg-white"
+    class="repo-modal"
     on:click|stopPropagation
-    on:keydown|stopPropagation={(e) => e.key === "Enter" && e.stopPropagation()}
+    on:keydown|stopPropagation
     role="dialog"
-    tabindex="0"
+    tabindex="-1"
     aria-labelledby="modal-title"
   >
-    <h2 id="modal-title" class="text-2xl">
-      <a
-        href={$selectedRepo?.html_url}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="hover:underline"
-      >
-        {$selectedRepo?.name}
-      </a>
-    </h2>
-    <!-- Tabs UI -->
-    <div class="tabs">
-      <button
-        class:active={$activeTab === "readme"}
-        on:click={() => activeTab.set("readme")}
-      >
-        README
-      </button>
-      <button
-        class:active={$activeTab === "commits"}
-        on:click={() => activeTab.set("commits")}
-      >
-        Commits
-      </button>
-      <button
-        class:active={$activeTab === "issues"}
-        on:click={() => activeTab.set("issues")}
-      >
-        Issues
-      </button>
-      <button
-        class:active={$activeTab === "metadata"}
-        on:click={() => activeTab.set("metadata")}
-      >
-        Metadata
-      </button>
-      <button
-        class:active={$activeTab === "contributors"}
-        on:click={() => activeTab.set("contributors")}
-      >
-        Contributors
-      </button>
-      <button
-        class:active={$activeTab === "files"}
-        on:click={() => activeTab.set("files")}
-      >
-        Files
-      </button>
-      <button
-        class:active={$activeTab === "live"}
-        on:click={() => activeTab.set("live")}
-      >
-        Live Preview
-      </button>
+    <!-- Modal header -->
+    <div class="modal-header">
+      <div class="modal-title-row">
+        <div class="modal-title-left">
+          <svg class="repo-icon" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8Z"/>
+          </svg>
+          <h2 id="modal-title">
+            <a
+              href={$selectedRepo?.html_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="modal-repo-link"
+            >
+              {$selectedRepo?.owner.login}<span class="slash">/</span>{$selectedRepo?.name}
+            </a>
+          </h2>
+          {#if $selectedRepo?.fork}
+            <span class="header-badge badge-fork">Fork</span>
+          {/if}
+          {#if $selectedRepo?.private}
+            <span class="header-badge badge-private">Private</span>
+          {:else}
+            <span class="header-badge badge-public">Public</span>
+          {/if}
+          {#if $selectedRepo?.archived}
+            <span class="header-badge badge-archived">Archived</span>
+          {/if}
+        </div>
+
+        <div class="modal-actions">
+          <button class="action-btn" on:click={copyCloneUrl} title="Copy clone URL">
+            {#if copied}
+              <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
+              </svg>
+              Copied!
+            {:else}
+              <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
+              </svg>
+              Clone URL
+            {/if}
+          </button>
+          <button class="action-btn" on:click={downloadRepo} title="Download ZIP">
+            <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14Z"/><path d="M7.25 7.689V2a.75.75 0 0 1 1.5 0v5.689l1.97-1.969a.749.749 0 1 1 1.06 1.06l-3.25 3.25a.749.749 0 0 1-1.06 0L4.22 6.78a.749.749 0 1 1 1.06-1.06l1.97 1.969Z"/>
+            </svg>
+            Download
+          </button>
+          <button class="close-btn" on:click={closeModal} title="Close" aria-label="Close repository details">
+            <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs" role="tablist">
+        {#each TABS as tab}
+          <button
+            class="tab"
+            class:active={$activeTab === tab.key}
+            on:click={() => activeTab.set(tab.key)}
+            role="tab"
+            aria-selected={$activeTab === tab.key}
+          >
+            {tab.label}
+          </button>
+        {/each}
+      </div>
     </div>
 
-    <!-- Tab Content -->
-    {#if $activeTab === "readme"}
-      {#if $readme && $readme !== "Loading README..."}
-        <!-- Render the README as HTML -->
-        <div class="bg-gray-100 dark:bg-gray-900 p-4 rounded">
-          <div class="prose dark:prose-invert max-w-none">
-            {@html $readme}
+    <!-- Tab content -->
+    <div class="modal-body" class:readme-body={$activeTab === "readme"}>
+      {#if $activeTab === "readme"}
+        {#if $readme && $readme !== "Loading README..."}
+          <div class="prose-wrapper">
+            <div class="prose">{@html $readme}</div>
           </div>
-        </div>
-      {:else}
-        <p>Loading README...</p>
-      {/if}
-    {:else if $activeTab === "commits"}
-      {#if $commits.length > 0}
-        <ul>
-          {#each $commits as commit}
-            <li>
-              <a
-                class="text-blue-500 hover:underline"
-                href={commit.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {commit.sha.substring(0, 7)}
-              </a>
-              -
-              {#if commit.commit.message.length > 50}
-                {commit.commit.message.substring(0, 50)}...
-              {:else}
-                <strong>{commit.commit.message}</strong>
-                by {commit.commit.author.name} on {new Date(
-                  commit.commit.author.date,
-                ).toLocaleDateString()}
-              {/if}
-            </li>
-          {/each}
-        </ul>
-      {:else}
-        <p>No recent commits found.</p>
-      {/if}
-    {:else if $activeTab === "issues"}
-      {#if $issues.length > 0}
-        <ul>
-          {#each $issues as issue}
-            <li>
-              <a
-                href={issue.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <strong>{issue.title}</strong>
-              </a>
-              by {issue.user.login} on {new Date(
-                issue.created_at,
-              ).toLocaleDateString()}
-            </li>
-          {/each}
-        </ul>
+        {:else}
+          <div class="empty-state">Loading README...</div>
+        {/if}
 
-        <p class="text-gray-500 mt-2 flex justify-end">
-          <span class="text-gray-500 mr-2">Total Open Issues:</span>
-          <strong>{$issues.length}</strong>
-        </p>
-      {:else}
-        <p>No open issues found.</p>
-      {/if}
-    {:else if $activeTab === "metadata"}
-      {#if $metadata}
-        <ul>
-          <li>
-            <strong>Branches:</strong>
-            <span class="py-0.5 px-1 bg-blue-300 rounded text-sm">
-              {$metadata.default_branch} (default)
-            </span>
-
-            {#if branches.length > 1}
-              - {#each branches.filter((branch) => branch !== $metadata.default_branch) as branch}
-                <span class="py-0.5 px-1 bg-blue-200 rounded mr-1 text-sm">
-                  {branch}
-                </span>
-              {/each}
-            {/if}
-          </li>
-
-          <li>
-            <strong>Stars:</strong>
-            {$metadata.stargazers_count}
-          </li>
-          <li>
-            <strong>Watchers:</strong>
-            {$metadata.subscribers_count}
-          </li>
-          <li>
-            <strong>License:</strong>
-            {$metadata.license ? $metadata.license.name : "N/A"}
-          </li>
-          <li>
-            <strong>Created At:</strong>
-            {new Date($metadata.created_at).toLocaleDateString()} ({Math.floor(
-              (new Date().getTime() -
-                new Date($metadata.created_at).getTime()) /
-                (1000 * 3600 * 24),
-            )}
-            {Math.floor(
-              (new Date().getTime() -
-                new Date($metadata.created_at).getTime()) /
-                (1000 * 3600 * 24),
-            ) === 1
-              ? "day"
-              : "days"} ago)
-          </li>
-          <li>
-            <strong>Last Updated:</strong>
-            {new Date($metadata.updated_at).toLocaleDateString()} ({Math.floor(
-              (new Date().getTime() -
-                new Date($metadata.updated_at).getTime()) /
-                (1000 * 3600 * 24),
-            )}
-            {Math.floor(
-              (new Date().getTime() -
-                new Date($metadata.updated_at).getTime()) /
-                (1000 * 3600 * 24),
-            ) === 1
-              ? "day"
-              : "days"} ago)
-          </li>
-          <li class="mt-4">
-            <strong>Topics:</strong>
-            {#if $metadata.topics.length > 0}
-              {#each $metadata.topics as topic}
-                <span class="py-0.5 px-1 bg-orange-200 rounded mr-1 text-sm">
-                  {topic}
-                </span>
-              {/each}
-            {:else}
-              None
-            {/if}
-          </li>
-        </ul>
-      {:else}
-        <p>No metadata available.</p>
-      {/if}
-    {:else if $activeTab === "contributors"}
-      {#if $contributors.length > 0}
-        <ul>
-          {#each $contributors as contributor}
-            <li class="flex items-center mb-1">
-              <img
-                src={contributor.avatar_url}
-                alt={contributor.login}
-                width="30"
-                height="30"
-                style="border-radius:50%"
-                class="mr-2"
-              />
-              <strong class="mr-2">
+      {:else if $activeTab === "commits"}
+        {#if $commits.length > 0}
+          <ul class="item-list">
+            {#each $commits as commit}
+              <li class="item-row">
                 <a
-                  href={contributor.html_url}
+                  class="commit-sha"
+                  href={commit.html_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="text-black hover:underline"
-                  title="View {contributor.login}'s profile"
-                  aria-label="View {contributor.login}'s profile"
-                  tabindex="0"
-                  aria-describedby="contributor-{contributor.login}"
                 >
-                  {contributor.login}:
+                  {commit.sha.substring(0, 7)}
                 </a>
-              </strong>
-              {contributor.contributions} commits
-            </li>
-          {/each}
-        </ul>
-      {:else}
-        <p>No contributors found.</p>
-      {/if}
-    {:else if $activeTab === "files"}
-      {#if $fileStructure.length > 0}
-        <span class="text-gray-500">
-          Click on a file to open it in a new window, or click on a folder to
-          expand it.
-        </span>
+                <span class="commit-msg">
+                  {commit.commit.message.length > 72
+                    ? commit.commit.message.substring(0, 72) + "…"
+                    : commit.commit.message}
+                </span>
+                <span class="item-meta">
+                  {commit.commit.author.name} · {new Date(commit.commit.author.date).toLocaleDateString()}
+                </span>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <div class="empty-state">No recent commits found.</div>
+        {/if}
 
-        <div class="mt-4">
-          <FileTree files={$fileStructure} token={$userToken} />
-        </div>
-      {:else}
-        <p>No files found.</p>
-      {/if}
-    {:else if $activeTab === "live"}
-      {#if $livePreviewUrl}
-        <p class="text-gray-500 mb-2 text-center">
-          Quick preview of the hosted site.
-        </p>
-        <iframe
-          src={$livePreviewUrl}
-          width="100%"
-          height="500px"
-          class="border-0 rounded-lg shadow-lg"
-          title="Live Preview"
-        ></iframe>
+      {:else if $activeTab === "issues"}
+        {#if $issues.length > 0}
+          <ul class="item-list">
+            {#each $issues as issue}
+              <li class="item-row">
+                <svg class="issue-icon" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/>
+                  <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/>
+                </svg>
+                <a
+                  class="issue-title"
+                  href={issue.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {issue.title}
+                </a>
+                <span class="item-meta">
+                  #{issue.number} · {issue.user.login} · {new Date(issue.created_at).toLocaleDateString()}
+                </span>
+              </li>
+            {/each}
+          </ul>
+          <div class="list-footer">
+            <span class="item-meta">{$issues.length} open issue{$issues.length !== 1 ? "s" : ""}</span>
+          </div>
+        {:else}
+          <div class="empty-state">No open issues found.</div>
+        {/if}
 
-        <p class="mt-4">
-          <strong>Preview Link:</strong>
-          <a
-            class="text-blue-500 hover:underline"
-            href={$livePreviewUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {$livePreviewUrl}
-          </a>
-        </p>
-      {:else if deployments.includes("github-pages") && $selectedRepo}
-        <p class="mt-4">
-          <strong>Preview Link:</strong>
-          <a
-            class="text-blue-500 hover:underline text-lg"
-            href={`https://${$selectedRepo.owner.login}.github.io/${$selectedRepo.name}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            https://{$selectedRepo.owner.login}.github.io/{$selectedRepo.name}
-          </a>
-        </p>
-      {:else}
-        <p>No live preview available.</p>
-      {/if}
-      {#if deployments.length > 0}
-        <div class="mt-2">
-          <strong>Deployed To:</strong>
-          {#each deployments.slice(0, 1) as deployment}
-            <span class="p-1 bg-green-200 rounded mr-1 text-sm">
-              {deployment}
-            </span>
-          {/each}
-        </div>
-      {/if}
-    {/if}
-    <button on:click={closeModal} class="btn btn-error text-white mt-4">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        class="h-5 w-5"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M6 18L18 6M6 6l12 12"
-        />
-      </svg>
-      <span>Close</span>
-    </button>
+      {:else if $activeTab === "metadata"}
+        {#if $metadata}
+          <div class="meta-grid">
+            <div class="meta-section">
+              <h3 class="meta-heading">Repository</h3>
+              <dl class="meta-list">
+                <div class="meta-row">
+                  <dt>Stars</dt>
+                  <dd>⭐ {$metadata.stargazers_count.toLocaleString()}</dd>
+                </div>
+                <div class="meta-row">
+                  <dt>Watchers</dt>
+                  <dd>{$metadata.subscribers_count.toLocaleString()}</dd>
+                </div>
+                <div class="meta-row">
+                  <dt>Forks</dt>
+                  <dd>{$metadata.forks_count?.toLocaleString() ?? 0}</dd>
+                </div>
+                <div class="meta-row">
+                  <dt>License</dt>
+                  <dd>{$metadata.license ? $metadata.license.name : "None"}</dd>
+                </div>
+                <div class="meta-row">
+                  <dt>Open Issues</dt>
+                  <dd>{$metadata.open_issues_count ?? 0}</dd>
+                </div>
+              </dl>
+            </div>
 
-    <button
-      on:click={copyCloneUrl}
-      class="btn bg-black text-white mt-4 ml-2"
-      aria-label="Copy clone URL"
-      tabindex="0"
-      on:keydown={(e) => e.key === "Enter" && copyCloneUrl()}
-    >
-      Clone URL
-    </button>
+            <div class="meta-section">
+              <h3 class="meta-heading">Dates</h3>
+              <dl class="meta-list">
+                <div class="meta-row">
+                  <dt>Created</dt>
+                  <dd>
+                    {new Date($metadata.created_at).toLocaleDateString()}
+                    <span class="item-meta">({daysAgo($metadata.created_at)})</span>
+                  </dd>
+                </div>
+                <div class="meta-row">
+                  <dt>Last Updated</dt>
+                  <dd>
+                    {new Date($metadata.updated_at).toLocaleDateString()}
+                    <span class="item-meta">({daysAgo($metadata.updated_at)})</span>
+                  </dd>
+                </div>
+              </dl>
+            </div>
 
-    <button
-      on:click={downloadRepo}
-      class="btn bg-black text-white mt-4 ml-2"
-      aria-label="Download repository"
-      tabindex="0"
-      on:keydown={(e) => e.key === "Enter" && downloadRepo()}
-    >
-      Download
-    </button>
+            <div class="meta-section meta-section-full">
+              <h3 class="meta-heading">Branches</h3>
+              <div class="branch-list">
+                <span class="branch-tag branch-default">{$metadata.default_branch} (default)</span>
+                {#each branches.filter((b) => b !== $metadata.default_branch) as branch}
+                  <span class="branch-tag">{branch}</span>
+                {/each}
+              </div>
+            </div>
+
+            {#if $metadata.topics?.length > 0}
+              <div class="meta-section meta-section-full">
+                <h3 class="meta-heading">Topics</h3>
+                <div class="branch-list">
+                  {#each $metadata.topics as topic}
+                    <span class="topic-tag">{topic}</span>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <div class="empty-state">No metadata available.</div>
+        {/if}
+
+      {:else if $activeTab === "contributors"}
+        {#if $contributors.length > 0}
+          <ul class="contrib-list">
+            {#each $contributors as contributor}
+              <li class="contrib-row">
+                <img
+                  src={contributor.avatar_url}
+                  alt={contributor.login}
+                  class="contrib-avatar"
+                />
+                <div class="contrib-info">
+                  <a
+                    href={contributor.html_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="contrib-name"
+                  >
+                    {contributor.login}
+                  </a>
+                  <span class="item-meta">{contributor.contributions} commits</span>
+                </div>
+                <div class="contrib-bar-wrap">
+                  <div
+                    class="contrib-bar"
+                    style="width:{Math.round((contributor.contributions / $contributors[0].contributions) * 100)}%"
+                  ></div>
+                </div>
+                <span class="contrib-count">{contributor.contributions}</span>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <div class="empty-state">No contributors found.</div>
+        {/if}
+
+      {:else if $activeTab === "files"}
+        {#if $fileStructure.length > 0}
+          <p class="files-hint">Click a file to open in GitHub, or a folder to expand.</p>
+          <div class="mt-3">
+            <FileTree files={$fileStructure} token={$userToken} />
+          </div>
+        {:else}
+          <div class="empty-state">No files found.</div>
+        {/if}
+
+      {:else if $activeTab === "live"}
+        {#if $livePreviewUrl}
+          <p class="files-hint text-center mb-3">Quick preview of the hosted site.</p>
+          <iframe
+            src={$livePreviewUrl}
+            width="100%"
+            height="460px"
+            class="live-iframe"
+            title="Live Preview"
+          ></iframe>
+          <div class="live-link-row">
+            <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M7.775 3.275a.75.75 0 0 0 1.06 1.06l1.25-1.25a2 2 0 1 1 2.83 2.83l-2.5 2.5a2 2 0 0 1-2.83 0 .75.75 0 0 0-1.06 1.06 3.5 3.5 0 0 0 4.95 0l2.5-2.5a3.5 3.5 0 0 0-4.95-4.95l-1.25 1.25Zm-4.69 9.64a2 2 0 0 1 0-2.83l2.5-2.5a2 2 0 0 1 2.83 0 .75.75 0 0 0 1.06-1.06 3.5 3.5 0 0 0-4.95 0l-2.5 2.5a3.5 3.5 0 0 0 4.95 4.95l1.25-1.25a.75.75 0 0 0-1.06-1.06l-1.25 1.25a2 2 0 0 1-2.83 0Z"/>
+            </svg>
+            <a href={$livePreviewUrl} target="_blank" rel="noopener noreferrer" class="live-link">
+              {$livePreviewUrl}
+            </a>
+          </div>
+        {:else if deployments.includes("github-pages") && $selectedRepo}
+          {@const pagesUrl = `https://${$selectedRepo.owner.login}.github.io/${$selectedRepo.name}`}
+          <div class="empty-state">
+            <a href={pagesUrl} target="_blank" rel="noopener noreferrer" class="live-link">
+              {pagesUrl}
+            </a>
+          </div>
+        {:else}
+          <div class="empty-state">No live preview available.</div>
+        {/if}
+
+        {#if deployments.length > 0}
+          <div class="deployed-row">
+            <span class="item-meta">Deployed to:</span>
+            {#each deployments.slice(0, 3) as env}
+              <span class="deploy-tag">{env}</span>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+    </div>
   </div>
 </div>
 
 <style>
-  .modal-overlay {
+  .overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    inset: 0;
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 1000;
+    padding: 1rem;
   }
-  .modal-content {
-    padding: 1.5rem;
-    border-radius: 0.75rem;
-    max-width: 800px;
-    width: 90%;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    color: #2d3748;
-    max-height: 90vh;
-    overflow-y: auto;
+
+  /* Separate blur layer that sits behind the modal */
+  .overlay-blur {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: -1;
   }
-  .modal-content h2 {
-    margin-top: 0;
+
+  .repo-modal {
+    background: #2d333b;
+    border: 1px solid #444c56;
+    border-radius: 0.875rem;
+    max-width: 860px;
+    width: 100%;
+    height: min(780px, 92vh);
+    min-height: min(620px, 92vh);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    color: #e6edf3;
+    overflow: hidden;
+    position: relative;
   }
+
+  /* Header */
+  .modal-header {
+    border-bottom: 1px solid #21262d;
+    flex-shrink: 0;
+  }
+
+  .modal-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem 0.75rem;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .modal-title-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .repo-icon {
+    width: 1.1rem;
+    height: 1.1rem;
+    color: #8b949e;
+    flex-shrink: 0;
+  }
+
+  .modal-repo-link {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #58a6ff;
+    text-decoration: none;
+  }
+
+  .modal-repo-link:hover { text-decoration: underline; }
+
+  .slash {
+    color: #8b949e;
+    font-weight: 400;
+    margin: 0 1px;
+  }
+
+  .header-badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 500;
+  }
+
+  .badge-public {
+    background: rgba(35, 134, 54, 0.15);
+    border: 1px solid rgba(35, 134, 54, 0.4);
+    color: #3fb950;
+  }
+
+  .badge-private {
+    background: rgba(187, 128, 9, 0.15);
+    border: 1px solid rgba(187, 128, 9, 0.4);
+    color: #d29922;
+  }
+
+  .badge-fork {
+    background: #1f2937;
+    border: 1px solid #374151;
+    color: #9ca3af;
+  }
+
+  .badge-archived {
+    background: rgba(139, 148, 158, 0.15);
+    border: 1px solid rgba(139, 148, 158, 0.3);
+    color: #8b949e;
+  }
+
+  .modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid #30363d;
+    border-radius: 0.5rem;
+    background: #373e47;
+    color: #e6edf3;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .action-btn:hover {
+    background: #21262d;
+    border-color: #8b949e;
+  }
+
+  .close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid #30363d;
+    border-radius: 0.5rem;
+    background: #373e47;
+    color: #8b949e;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .close-btn:hover {
+    background: rgba(248, 81, 73, 0.1);
+    border-color: #f85149;
+    color: #f85149;
+  }
+
+  /* Tabs */
   .tabs {
     display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
+    gap: 0;
+    padding: 0 1.25rem;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
-  .tabs button {
-    padding: 0.5rem 1rem;
+
+  .tabs::-webkit-scrollbar { display: none; }
+
+  .tab {
+    padding: 0.625rem 1rem;
+    font-size: 0.85rem;
+    color: #8b949e;
+    background: none;
     border: none;
-    background: #e2e8f0;
+    border-bottom: 2px solid transparent;
     cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s;
+    margin-bottom: -1px;
+  }
+
+  .tab:hover { color: #e6edf3; }
+
+  .tab.active {
+    color: #e6edf3;
+    border-bottom-color: #f78166;
+    font-weight: 500;
+  }
+
+  /* Body */
+  .modal-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 1.25rem;
+    scrollbar-width: thin;
+    scrollbar-color: #444c56 #2d333b;
+  }
+
+  /* README */
+  .modal-body.readme-body {
+    background: #0d1117;
+    padding: 1.5rem;
+  }
+
+  .prose-wrapper {
+    max-width: 820px;
+    padding: 0 0 2rem;
+  }
+
+  .prose {
+    color: #c9d1d9;
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+
+  .prose :global(h1),
+  .prose :global(h2),
+  .prose :global(h3),
+  .prose :global(h4) {
+    color: #e6edf3;
+    border-bottom: 1px solid #30363d;
+    padding-bottom: 0.3em;
+    margin-top: 1.5em;
+    margin-bottom: 1rem;
+    line-height: 1.25;
+  }
+
+  .prose :global(h1) {
+    font-size: 2rem;
+  }
+
+  .prose :global(h2) {
+    font-size: 1.45rem;
+  }
+
+  .prose :global(h3) {
+    font-size: 1.15rem;
+  }
+
+  .prose :global(h1:first-child),
+  .prose :global(h2:first-child),
+  .prose :global(h3:first-child),
+  .prose :global(h4:first-child) {
+    margin-top: 0;
+  }
+
+  .prose :global(p),
+  .prose :global(li),
+  .prose :global(td) {
+    color: #c9d1d9;
+    line-height: 1.7;
+  }
+
+  .prose :global(p) {
+    margin: 0 0 1rem;
+  }
+
+  .prose :global(ul),
+  .prose :global(ol) {
+    margin: 0 0 1rem;
+    padding-left: 1.5rem;
+  }
+
+  .prose :global(a) { color: #58a6ff; }
+
+  .prose :global(code) {
+    background: #22272e;
+    border: 1px solid #444c56;
+    border-radius: 0.25rem;
+    padding: 0.1em 0.35em;
+    font-size: 0.875em;
+    color: #e6edf3;
+  }
+
+  .prose :global(pre) {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+
+  .prose :global(pre code) {
+    background: none;
+    border: none;
+    padding: 0;
+  }
+
+  .prose :global(blockquote) {
+    border-left: 3px solid #30363d;
+    margin: 1rem 0;
+    padding-left: 1rem;
+    color: #8b949e;
+  }
+
+  .prose :global(table) {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.875rem;
+  }
+
+  .prose :global(th),
+  .prose :global(td) {
+    border: 1px solid #30363d;
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .prose :global(th) {
+    background: #161b22;
+    color: #e6edf3;
+    font-weight: 600;
+  }
+
+  .prose :global(tr:nth-child(even) td) {
+    background: rgba(22, 27, 34, 0.65);
+  }
+
+  .prose :global(tr:hover td) {
+    background: rgba(88, 166, 255, 0.08);
+  }
+
+  .prose :global(hr) {
+    border: 0;
+    border-top: 1px solid #30363d;
+    margin: 1.5rem 0;
+  }
+
+  .prose :global(img) {
+    max-width: 100%;
     border-radius: 0.375rem;
   }
-  .tabs button.active {
-    background: #c6f6d5;
-    font-weight: bold;
+
+  /* Shared list */
+  .item-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
   }
-  .modal-content button {
-    margin-top: 1rem;
+
+  .item-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.625rem;
+    padding: 0.625rem 0.75rem;
+    background: #373e47;
+    border: 1px solid #21262d;
+    border-radius: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .item-row + .item-row { margin-top: 0.375rem; }
+
+  .commit-sha {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: #58a6ff;
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+
+  .commit-sha:hover { text-decoration: underline; }
+
+  .commit-msg {
+    font-size: 0.875rem;
+    color: #e6edf3;
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+  }
+
+  .issue-icon {
+    width: 0.875rem;
+    height: 0.875rem;
+    color: #3fb950;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .issue-title {
+    font-size: 0.875rem;
+    color: #e6edf3;
+    text-decoration: none;
+    flex: 1;
+  }
+
+  .issue-title:hover { color: #58a6ff; }
+
+  .item-meta {
+    font-size: 0.75rem;
+    color: #6e7681;
+    white-space: nowrap;
+  }
+
+  .list-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.5rem;
+  }
+
+  /* Metadata */
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+  }
+
+  .meta-section {
+    background: #373e47;
+    border: 1px solid #21262d;
+    border-radius: 0.5rem;
+    padding: 0.875rem 1rem;
+  }
+
+  .meta-section-full {
+    grid-column: 1 / -1;
+  }
+
+  .meta-heading {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #8b949e;
+    margin: 0 0 0.625rem;
+  }
+
+  .meta-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .meta-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .meta-row dt { color: #8b949e; }
+  .meta-row dd { color: #e6edf3; font-weight: 500; text-align: right; }
+
+  .branch-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .branch-tag {
+    padding: 0.2rem 0.6rem;
+    background: rgba(88, 166, 255, 0.1);
+    border: 1px solid rgba(88, 166, 255, 0.3);
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    color: #58a6ff;
+    font-family: monospace;
+  }
+
+  .branch-default {
+    background: rgba(31, 111, 235, 0.15);
+    border-color: rgba(31, 111, 235, 0.5);
+  }
+
+  .topic-tag {
+    padding: 0.2rem 0.6rem;
+    background: rgba(130, 80, 255, 0.1);
+    border: 1px solid rgba(130, 80, 255, 0.3);
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    color: #a371f7;
+  }
+
+  /* Contributors */
+  .contrib-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .contrib-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    background: #373e47;
+    border: 1px solid #21262d;
+    border-radius: 0.5rem;
+  }
+
+  .contrib-avatar {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    border: 1px solid #30363d;
+    flex-shrink: 0;
+  }
+
+  .contrib-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 100px;
+  }
+
+  .contrib-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #e6edf3;
+    text-decoration: none;
+  }
+
+  .contrib-name:hover { color: #58a6ff; }
+
+  .contrib-bar-wrap {
+    flex: 1;
+    height: 0.3rem;
+    background: #21262d;
+    border-radius: 9999px;
+    overflow: hidden;
+  }
+
+  .contrib-bar {
+    height: 100%;
+    background: #1f6feb;
+    border-radius: 9999px;
+    min-width: 2px;
+  }
+
+  .contrib-count {
+    font-size: 0.78rem;
+    color: #8b949e;
+    min-width: 2.5rem;
+    text-align: right;
+  }
+
+  /* Files */
+  .files-hint {
+    font-size: 0.8rem;
+    color: #8b949e;
+    margin: 0 0 0.5rem;
+  }
+
+  /* Live */
+  .live-iframe {
+    border: 1px solid #30363d;
+    border-radius: 0.5rem;
+    display: block;
+  }
+
+  .live-link-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    color: #8b949e;
+  }
+
+  .live-link {
+    font-size: 0.875rem;
+    color: #58a6ff;
+    text-decoration: none;
+    word-break: break-all;
+  }
+
+  .live-link:hover { text-decoration: underline; }
+
+  .deployed-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .deploy-tag {
+    padding: 0.2rem 0.6rem;
+    background: rgba(35, 134, 54, 0.15);
+    border: 1px solid rgba(35, 134, 54, 0.4);
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    color: #3fb950;
+  }
+
+  /* Empty */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 8rem;
+    color: #8b949e;
+    font-size: 0.9rem;
+    gap: 0.5rem;
+  }
+
+  @media (max-width: 640px) {
+    .overlay {
+      align-items: stretch;
+      padding: 0.5rem;
+    }
+
+    .repo-modal {
+      height: calc(100vh - 1rem);
+      min-height: 0;
+    }
   }
 </style>

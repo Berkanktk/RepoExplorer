@@ -56,11 +56,16 @@ export async function fetchReposByUsername(targetUsername: string) {
         }
 
         allRepos.set(all);
+        if (all.length > 0) {
+            showConfigs.set(false);
+        }
     } catch (e) {
         console.error("Failed to fetch repos:", e);
     } finally {
         loading.set(false);
-        showConfigs.set(true);
+        if (all.length === 0) {
+            showConfigs.set(true);
+        }
     }
 }
 
